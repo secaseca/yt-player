@@ -4,203 +4,261 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#000000">
 <title>YT Player</title>
-
 <style>
-* {
-  box-sizing: border-box;
-}
-
-html, body {
-  margin: 0;
-  width: 100%;
-  min-height: 100%;
-  background: #000;
-  color: #fff;
-  font-family: system-ui, sans-serif;
-}
-
-body {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-}
-
-#home {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  padding: 24px;
-  text-align: center;
-}
-
-.logo {
-  font-size: 13px;
-  letter-spacing: 4px;
-  color: #777;
-  font-weight: 600;
-}
-
-#paste {
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 20px 38px;
-  background: #171717;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: background .2s, border-color .2s;
-}
-
-#paste:hover {
-  background: #252525;
-  border-color: #666;
-}
-
-#paste:active {
-  transform: scale(.98);
-}
-
-#status {
-  font-size: 12px;
-  color: #666;
-}
-
-#player {
-  position: fixed;
-  inset: 0;
-  display: none;
-  background: #000;
-  width: 100%;
-  height: 100dvh;
-  overflow: hidden;
-}
-
-#player iframe {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  height: auto;
-  border: 0;
-}
-
-#again {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  padding: 10px 15px;
-  border: 1px solid #444;
-  border-radius: 8px;
-  background: #151515;
-  color: #aaa;
-  font-size: 12px;
-  opacity: .25;
-  cursor: pointer;
-}
-
-#again:hover {
-  opacity: 1;
-}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;min-height:100%;background:#000;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+body{min-height:100dvh;display:grid;place-items:center}
+button,input,select{font:inherit}
+button{cursor:pointer}
+#home{width:min(340px,calc(100% - 36px));display:flex;flex-direction:column;align-items:stretch;gap:19px;padding:24px 0;text-align:center}
+.logo{font-size:12px;letter-spacing:4px;color:#777;font-weight:700;margin-bottom:8px}
+.url-row{display:flex;gap:7px}
+#url{min-width:0;flex:1;width:100%;border:1px solid #303030;border-radius:9px;padding:12px;background:#101010;color:#fff;font-size:13px;outline:none}
+#url:focus{border-color:#777}
+#paste{border:1px solid #333;border-radius:9px;padding:0 14px;background:#171717;color:#ddd;font-size:12px;font-weight:600}
+#paste:hover{background:#252525}
+.settings{border:1px solid #262626;border-radius:12px;padding:14px 15px;text-align:left;display:grid;gap:13px}
+.setting{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.setting label{font-size:12px;color:#aaa}
+.setting select{background:#171717;border:1px solid #333;border-radius:7px;color:#eee;padding:7px 9px;font-size:12px;min-width:125px}
+#start{border:1px solid #eee;border-radius:9px;padding:13px;background:#f2f2f2;color:#080808;font-size:13px;font-weight:750;letter-spacing:.6px}
+#start:hover{background:#fff}
+#status{font-size:11px;color:#666;min-height:15px}
+#player{position:fixed;inset:0;display:none;background:#000;width:100%;height:100dvh;overflow:hidden}
+#video-frame{position:absolute;top:50%;left:0;transform:translateY(-50%);width:100%;aspect-ratio:16/9;height:auto;border:0}
+#controls{position:absolute;left:0;right:0;bottom:0;z-index:3;padding:30px 14px 13px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:linear-gradient(transparent,rgba(0,0,0,.9));opacity:.3;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#timeline{width:100%;display:flex;align-items:center;gap:9px;margin-bottom:2px}
+#seek{flex:1;min-width:0}
+.time{font-size:10px;color:#ddd;font-variant-numeric:tabular-nums;min-width:34px;text-align:center}
+.ctrl{height:34px;min-width:34px;padding:0 9px;border:1px solid #ffffff26;border-radius:7px;background:#101010b8;color:#fff;font-size:13px}
+.ctrl:hover{background:#333}
+#play{font-size:16px}
+#speed{margin-left:auto;min-width:48px}
+#volume-slider{width:88px;max-width:20vw}
+input[type=range]{appearance:none;height:4px;border-radius:10px;background:#777;accent-color:#fff;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:11px;height:11px;border-radius:50%;background:#fff}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:#fff}
+#copy{min-width:42px}
+#again{position:fixed;top:12px;right:12px;z-index:4;padding:8px 11px;border:1px solid #444;border-radius:7px;background:#111b;color:#aaa;font-size:11px;opacity:.25}
+#again:hover{opacity:1}
+#player-status{position:fixed;left:12px;top:15px;z-index:4;color:#777;font-size:10px;pointer-events:none;opacity:0;transition:opacity .2s}
+#player:hover #player-status{opacity:1}
+@media(max-width:500px){#controls{opacity:.85;padding:34px 8px 9px;gap:5px}.ctrl{min-width:31px;height:32px;padding:0 7px}#again{opacity:.7}}
 </style>
 </head>
-
 <body>
-
 <main id="home">
   <div class="logo">YT PLAYER</div>
-  <button id="paste">PASTE VIDEO LINK</button>
-  <div id="status">Copy a YouTube link to get started</div>
+  <div class="url-row">
+    <input id="url" type="text" placeholder="YouTube video link" autocomplete="off" spellcheck="false">
+    <button id="paste" type="button">PASTE</button>
+  </div>
+  <section class="settings">
+    <div class="setting">
+      <label for="quality">Video quality</label>
+      <select id="quality">
+        <option value="hd1080" selected>1080p</option>
+        <option value="hd720">720p</option>
+        <option value="large">480p</option>
+        <option value="medium">360p</option>
+        <option value="default">Auto</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label for="captions">Subtitles</label>
+      <select id="captions">
+        <option value="off" selected>Off</option>
+        <option value="en">English</option>
+        <option value="pt">Português</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </div>
+  </section>
+  <button id="start" type="button">PLAY VIDEO</button>
+  <div id="status">Paste a link or enter a video URL</div>
 </main>
 
-<div id="player"></div>
+<div id="player">
+  <div id="video-frame"></div>
+  <div id="player-status"></div>
+  <button id="again" type="button">NEW VIDEO</button>
+  <div id="controls">
+    <div id="timeline">
+      <span class="time" id="current-time">0:00</span>
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Video position">
+      <span class="time" id="duration-time">0:00</span>
+    </div>
+    <button class="ctrl" id="play" title="Pause / play">Ⅱ</button>
+    <button class="ctrl" id="mute" title="Mute / unmute">MUTE</button>
+    <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Volume">
+    <button class="ctrl" id="speed" title="Playback speed">1×</button>
+    <button class="ctrl" id="copy" title="Copy video link">COPY LINK</button>
+    <button class="ctrl" id="fullscreen" title="Fullscreen">⛶</button>
+  </div>
+</div>
 
 <script>
-const home = document.getElementById("home");
-const player = document.getElementById("player");
-const status = document.getElementById("status");
+const home=document.getElementById("home");
+const playerBox=document.getElementById("player");
+const status=document.getElementById("status");
+let yt=null,apiReady=false,videoReady=false,muted=false,volume=100,speed=1,currentVideoId=null,duration=0,seeking=false;
+const $=id=>document.getElementById(id);
 
-function extractId(text) {
-  text = text.trim();
-
-  return (
-    text.match(/[?&]v=([\w-]{11})/)?.[1] ||
-    text.match(/youtu\.be\/([\w-]{11})/)?.[1] ||
-    text.match(/youtube\.com\/(?:embed|shorts)\/([\w-]{11})/)?.[1] ||
-    (/^[\w-]{11}$/.test(text) ? text : null)
-  );
+function extractId(text){
+  text=String(text||"").trim();
+  return text.match(/[?&]v=([\w-]{11})/)?.[1]||
+    text.match(/youtu\.be\/([\w-]{11})/)?.[1]||
+    text.match(/youtube\.com\/(?:embed|shorts|live)\/([\w-]{11})/)?.[1]||
+    (/^[\w-]{11}$/.test(text)?text:null);
 }
-
-function loadVideo(id) {
-  home.style.display = "none";
-  player.style.display = "block";
-
-  player.innerHTML = `
-    <button id="again">NEW VIDEO</button>
-    <iframe
-      src="https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0&modestbranding=1&fs=1"
-      title="YouTube video player"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      referrerpolicy="strict-origin-when-cross-origin"
-      allowfullscreen>
-    </iframe>
-  `;
-
-  document.getElementById("again").onclick = reset;
+function formatTime(seconds){
+  seconds=Math.floor(Number(seconds)||0);
+  return Math.floor(seconds/60)+":"+String(seconds%60).padStart(2,"0");
 }
-
-function reset() {
-  player.innerHTML = "";
-  player.style.display = "none";
-  home.style.display = "flex";
-
-  history.replaceState(null, "", location.pathname);
+function showHome(message="Paste a link or enter a video URL"){
+  if(yt){yt.destroy();yt=null}
+  videoReady=false;playerBox.style.display="none";home.style.display="flex";
+  $("status").textContent=message;
 }
-
-document.getElementById("paste").onclick = async () => {
-  try {
-    const text = await navigator.clipboard.readText();
-    const id = extractId(text);
-
-    if (!id) {
-      status.textContent = "No valid YouTube link found in clipboard";
-      return;
+function loadVideo(id,options){
+  currentVideoId=id;
+  duration=0;seeking=false;
+  $("seek").value=0;$("current-time").textContent="0:00";$("duration-time").textContent="0:00";
+  home.style.display="none";playerBox.style.display="block";
+  $("player-status").textContent="Loading";
+  videoReady=false;
+  if(yt){yt.destroy();yt=null}
+  yt=new YT.Player("video-frame",{
+    width:"100%",height:"100%",videoId:id,
+    playerVars:{
+      autoplay:1,controls:0,disablekb:1,fs:0,rel:0,playsinline:1,
+      modestbranding:1,iv_load_policy:3,cc_load_policy:0,
+      origin:location.origin
+    },
+    events:{
+      onReady:()=>{
+        videoReady=true;
+        duration=yt.getDuration()||0;
+        $("duration-time").textContent=formatTime(duration);
+        yt.unMute();yt.setVolume(100);
+        muted=false;volume=100;speed=1;
+        $("volume-slider").value=100;
+        yt.setPlaybackRate(1);
+        const quality=options?.quality||"hd1080";
+        if(quality==="default")yt.setPlaybackQuality("default");
+        else yt.setPlaybackQuality(quality);
+        const caption=options?.captions||"off";
+        if(caption!=="off"){
+          yt.loadModule("captions");
+          yt.setOption("captions","track",{languageCode:caption});
+        }else{
+          yt.unloadModule("captions");
+        }
+        $("mute").textContent="MUTE";
+        $("speed").textContent="1×";
+        $("player-status").textContent="Playing";
+      },
+      onStateChange:e=>{
+        $("play").textContent=e.data===YT.PlayerState.PLAYING?"Ⅱ":"▶";
+        $("player-status").textContent=
+          e.data===YT.PlayerState.PLAYING?"Playing":
+          e.data===YT.PlayerState.PAUSED?"Paused":
+          e.data===YT.PlayerState.BUFFERING?"Buffering":
+          e.data===YT.PlayerState.ENDED?"Ended":"";
+      },
+      onError:e=>$("player-status").textContent="YouTube error "+e.data
     }
-
-    loadVideo(id);
-  } catch {
-    status.textContent =
-      "Clipboard unavailable. Check browser permissions.";
+  });
+}
+$("paste").onclick=async()=>{
+  try{
+    const text=await navigator.clipboard.readText();
+    if(extractId(text))$("url").value=text;
+    else status.textContent="Clipboard does not contain a valid YouTube link";
+  }catch{status.textContent="Clipboard permission unavailable. Paste the link manually."}
+};
+$("start").onclick=()=>{
+  const id=extractId($("url").value);
+  if(!id){status.textContent="Enter a valid YouTube link";return}
+  loadVideo(id,{quality:$("quality").value,captions:$("captions").value});
+};
+$("url").addEventListener("keydown",e=>{if(e.key==="Enter")$("start").click()});
+$("again").onclick=()=>showHome();
+$("play").onclick=()=>{
+  if(!videoReady)return;
+  yt.getPlayerState()===YT.PlayerState.PLAYING?yt.pauseVideo():yt.playVideo();
+};
+$("mute").onclick=()=>{
+  if(!videoReady)return;
+  if(yt.isMuted()){yt.unMute();yt.setVolume(Number($("volume-slider").value)||100);$("mute").textContent="MUTE"}
+  else{yt.mute();$("mute").textContent="UNMUTE"}
+};
+$("volume-slider").oninput=e=>{
+  if(!videoReady)return;
+  volume=Number(e.target.value);
+  if(volume===0){yt.mute();$("mute").textContent="UNMUTE"}
+  else{yt.unMute();yt.setVolume(volume);$("mute").textContent="MUTE"}
+};
+$("seek").oninput=e=>{
+  seeking=true;
+  if(duration)$("current-time").textContent=formatTime(duration*Number(e.target.value)/1000);
+};
+$("seek").onchange=e=>{
+  if(videoReady&&duration)yt.seekTo(duration*Number(e.target.value)/1000,true);
+  seeking=false;
+};
+$("copy").onclick=async()=>{
+  if(!currentVideoId)return;
+  const shareUrl=location.origin+location.pathname+"?yt="+encodeURIComponent("https://youtu.be/"+currentVideoId);
+  try{
+    await navigator.clipboard.writeText(shareUrl);
+    $("copy").textContent="COPIED";
+    setTimeout(()=>$("copy").textContent="COPY LINK",1400);
+  }catch{
+    $("player-status").textContent="Copy unavailable — "+shareUrl;
   }
 };
-
-// Support ?yt=FULL_YOUTUBE_URL, ?yt=VIDEO_ID,
-// or /https://youtu.be/VIDEO_ID
-const params = new URLSearchParams(location.search);
-const path = decodeURIComponent(location.pathname);
-
-const pathInput = path.startsWith("/yt-player/")
-  ? path.slice("/yt-player/".length)
-  : "";
-
-const ytInput = params.get("yt") || pathInput;
-
-if (ytInput) {
-  const id = extractId(ytInput);
-
-  if (id) {
-    loadVideo(id);
-  } else {
-    status.textContent = "Invalid YouTube link";
-  }
+setInterval(()=>{
+  if(!videoReady||seeking||!yt)return;
+  const now=yt.getCurrentTime()||0;
+  duration=yt.getDuration()||duration;
+  $("current-time").textContent=formatTime(now);
+  $("duration-time").textContent=formatTime(duration);
+  if(duration)$("seek").value=Math.min(1000,now/duration*1000);
+},500);
+$("fullscreen").onclick=()=>{
+  if(document.fullscreenElement)document.exitFullscreen();
+  else if(playerBox.requestFullscreen)playerBox.requestFullscreen();
+};
+document.addEventListener("keydown",e=>{
+  if(home.style.display!=="none"||["INPUT","SELECT"].includes(document.activeElement.tagName))return;
+  if(e.code==="Space"){e.preventDefault();$("play").click()}
+  if(e.key.toLowerCase()==="m")$("mute").click();
+  if(e.key.toLowerCase()==="f")$("fullscreen").click();
+});
+function startDirect(input){
+  const id=extractId(input);
+  if(id)loadVideo(id,{quality:"hd1080",captions:"off"});
+  else status.textContent="Invalid YouTube link";
 }
+const params=new URLSearchParams(location.search);
+const path=decodeURIComponent(location.pathname);
+const pathInput=path.startsWith("/yt-player/")?path.slice("/yt-player/".length):"";
+const directInput=params.get("yt")||pathInput;
+if(directInput){
+  const id=extractId(directInput);
+  if(id)startDirect(directInput);
+  else status.textContent="Invalid YouTube link";
+}
+window.onYouTubeIframeAPIReady=()=>{apiReady=true;if(directInput)startDirect(directInput)};
+const tag=document.createElement("script");
+tag.src="https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
 </script>
-
 </body>
 </html>
