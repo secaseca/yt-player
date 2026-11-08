@@ -178,9 +178,14 @@ document.getElementById("paste").onclick = async () => {
   }
 };
 
-// Support ?yt=FULL_YOUTUBE_URL or ?yt=VIDEO_ID
+// Support ?yt=FULL_YOUTUBE_URL, ?yt=VIDEO_ID, or /VIDEO_URL
 const params = new URLSearchParams(location.search);
-const ytInput = params.get("yt");
+const path = decodeURIComponent(location.pathname);
+const pathInput = path.startsWith("/yt-player/")
+  ? path.slice("/yt-player/".length)
+  : "";
+
+const ytInput = params.get("yt") || pathInput;
 
 if (ytInput) {
   const id = extractId(ytInput);
