@@ -75,6 +75,9 @@ body {
   inset: 0;
   display: none;
   background: #000;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 #player iframe {
@@ -87,8 +90,8 @@ body {
 
 #again {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 12px;
+  right: 12px;
   z-index: 2;
   padding: 10px 15px;
   border: 1px solid #444;
@@ -114,20 +117,21 @@ body {
   <div id="status">Copy a YouTube link to get started</div>
 </main>
 
-<div id="player">
-  <button id="again">NEW VIDEO</button>
-</div>
+<div id="player"></div>
 
 <script>
 const home = document.getElementById("home");
 const player = document.getElementById("player");
+const status = document.getElementById("status");
 
 function extractId(text) {
+  text = text.trim();
+
   return (
     text.match(/[?&]v=([\w-]{11})/)?.[1] ||
     text.match(/youtu\.be\/([\w-]{11})/)?.[1] ||
     text.match(/youtube\.com\/(?:embed|shorts)\/([\w-]{11})/)?.[1] ||
-    (/^[\w-]{11}$/.test(text.trim()) ? text.trim() : null)
+    (/^[\w-]{11}$/.test(text) ? text : null)
   );
 }
 
@@ -138,7 +142,7 @@ function loadVideo(id) {
   player.innerHTML = `
     <button id="again">NEW VIDEO</button>
     <iframe
-      src="https://www.youtube-nocookie.com/embed/${id}?playsinline=1"
+      src="https://www.youtube-nocookie.com/embed/${id}?playsinline=1&fs=0"
       title="YouTube video player"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       referrerpolicy="strict-origin-when-cross-origin"
@@ -153,6 +157,9 @@ function reset() {
   player.innerHTML = "";
   player.style.display = "none";
   home.style.display = "flex";
+
+  // Remove the video parameter from the address
+  history.replaceState(null, "", location.pathname);
 }
 
 document.getElementById("paste").onclick = async () => {
@@ -161,24 +168,28 @@ document.getElementById("paste").onclick = async () => {
     const id = extractId(text);
 
     if (!id) {
-      document.getElementById("status").textContent =
-        "No valid YouTube link found in clipboard";
+      status.textContent = "No valid YouTube link found in clipboard";
       return;
     }
 
     loadVideo(id);
-  } catch (e) {
-    document.getElementById("status").textContent =
-      "Clipboard unavailable. Check browser permissions.";
+  } catch {
+    status.textContent = "Clipboard unavailable. Check browser permissions.";
   }
 };
 
-// Optional: support direct links like ?yt=VIDEO_ID
+// Support ?yt=FULL_YOUTUBE_URL or ?yt=VIDEO_ID
 const params = new URLSearchParams(location.search);
-const directId = params.get("yt");
+const ytInput = params.get("yt");
 
-if (directId && /^[\w-]{11}$/.test(directId)) {
-  loadVideo(directId);
+if (ytInput) {
+  const id = extractId(ytInput);
+
+  if (id) {
+    loadVideo(id);
+  } else {
+    status.textContent = "Invalid YouTube link";
+  }
 }
 </script>
 
