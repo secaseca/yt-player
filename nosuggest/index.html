@@ -828,6 +828,7 @@ body.show-install-strip .screen-body{padding-bottom:calc(116px + var(--safe-bot)
   .tml-orbit{position:relative;width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(255,255,255,.10);animation:feed-orbit 1.4s linear infinite;flex-shrink:0;}
   .tml-orbit::before{content:'';position:absolute;width:5px;height:5px;left:1px;top:1px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px rgba(232,255,90,.55);}
   .tml-orbit::after{content:'';position:absolute;width:4px;height:4px;right:1px;bottom:1px;border-radius:50%;background:var(--accent2);box-shadow:0 0 7px rgba(255,107,53,.5);}
+  #feed-refresh-btn:disabled{opacity:.45;cursor:default;}
   .tml-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--faint);letter-spacing:0.03em;}
 
   /* ── Unified loading overlay — search & channel search — */
@@ -1057,6 +1058,16 @@ body.show-install-strip .screen-body{padding-bottom:calc(116px + var(--safe-bot)
             <div class="settings-row-text">
               <div class="settings-row-label">Invidious Server</div>
               <div class="settings-row-sub" id="instance-row-sub">https://yt.chocolatemoo53.com</div>
+            </div>
+            <div class="settings-row-action" style="color:var(--accent);font-size:12px;font-weight:500">Change ↗</div>
+          </div>
+          <div class="settings-row" style="cursor:pointer" onclick="changeSecondInstance()" role="button" tabindex="0">
+            <div class="settings-row-icon" style="color:var(--accent)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="4.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+            </div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Second Invidious Server</div>
+              <div class="settings-row-sub" id="instance2-row-sub"></div>
             </div>
             <div class="settings-row-action" style="color:var(--accent);font-size:12px;font-weight:500">Change ↗</div>
           </div>
@@ -1501,7 +1512,7 @@ function invVideo(v){
     title:v.title||'',
     channel:v.author||'',
     channelId:v.authorId||'',
-    thumb:absThumb(v.videoThumbnails),
+    thumb:v.videoId?('https://i.ytimg.com/vi/'+v.videoId+'/mqdefault.jpg'):absThumb(v.videoThumbnails),
     publishedAt:Number.isFinite(v.published)?new Date(v.published*1000).toISOString():(v.publishedText||''),
     duration:v.lengthSeconds?fmtSecs(v.lengthSeconds):'',
     views:v.viewCount!=null?formatViews(v.viewCount):''
@@ -1509,26 +1520,127 @@ function invVideo(v){
 }
 
 /* ---- Fetch wrapper: plain JSON GET with timeout and friendly errors ---- */
-async function apiFetch(url,options={}){
-  const ctl=new AbortController();
-  const timer=setTimeout(()=>ctl.abort(),12000);
-  const sig=options.signal;
-  if(sig){
-    if(sig.aborted)ctl.abort();
-    else sig.addEventListener('abort',()=>ctl.abort(),{once:true});
+/* ================= Central request scheduler =================
+   EVERY Invidious call goes through netFetch(), so no code path can bypass the limits:
+   - pacing: >=1.4s between requests per server (0.5s for searches you trigger, 2s for background)
+   - max 2 simultaneous requests per server, and only 1 for background tasks
+   - two servers (Settings): load is split, searches prefer the first, reload/background the second
+   - rolling caps per server: 30 req/min and 250 req/hour (background/reload); background budget 15 per 10 min
+   - 403 / non-JSON "blocked" page -> server paused 30 min (saved across restarts, never hammered)
+   - 429 -> paused for Retry-After (min 30s, doubling up to 30 min); 5xx/timeouts -> short growing pause
+   - background work only runs while the app is visible */
+const NET_DEFAULT_2 = 'https://eu.yt.chocolatemoo53.com';
+const NET_BG_BUDGET = 15, NET_MIN_CAP = 30, NET_HOUR_CAP = 250;
+const NET = { insts:{}, bgActive:0, bgNext:0, bgStamps:[],
+  blocks:(()=>{ try{ return JSON.parse(localStorage.getItem('ns_inst_blocks')||'{}')||{}; }catch(e){ return {}; } })() };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clockTime = t => new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+function netInstanceUrls(){
+  const list = [PROXY];
+  const raw = localStorage.getItem('ns_invidious_instance2');
+  const second = (raw === null ? NET_DEFAULT_2 : (raw === 'off' ? '' : raw)).replace(/\/+$/,'');
+  if(second && second !== PROXY) list.push(second);
+  return list;
+}
+function netInst(url){
+  return NET.insts[url] || (NET.insts[url] = { url, active:0, nextStart:0, until:Number(NET.blocks[url]) || 0, fails:0, strikes:0, ok:0, stamps:[] });
+}
+function netPausedUntil(){
+  const now = Date.now(), l = netInstanceUrls().map(netInst);
+  const m = Math.min(...l.map(i => i.until));
+  return m > now ? m : 0;
+}
+function netPause(inst, ms){
+  const was = inst.until > Date.now();
+  inst.until = Math.max(inst.until, Date.now() + ms);
+  if(ms >= 60000){
+    NET.blocks[inst.url] = inst.until;
+    try{ localStorage.setItem('ns_inst_blocks', JSON.stringify(NET.blocks)); }catch(e){}
+    if(!was) toast(`${inst.url.replace(/^https?:\/\//,'')} is limiting us. Paused until ${clockTime(inst.until)}. Showing saved videos.`, 6000);
   }
-  try{
-    const response=await fetch(url,{...options,signal:ctl.signal,headers:{...(options.headers||{}),Accept:'application/json'}});
-    if(response.status===429||response.status>=500){
-      const ra=parseFloat(response.headers.get('Retry-After'));
-      throw Object.assign(new Error('Instance is busy — try again shortly.'),{status:response.status,busy:true,retryAfter:Number.isFinite(ra)?Math.min(ra,30)*1000:0});
+}
+function netFail(inst){
+  inst.fails++; inst.ok = 0;
+  netPause(inst, inst.fails >= 4 ? 5 * 60000 : Math.min(5000 * inst.fails, 60000));
+}
+function netWindowOk(inst, prio, now){
+  inst.stamps = inst.stamps.filter(t => now - t < 3600000);
+  if(prio === 'user') return true;
+  return inst.stamps.length < NET_HOUR_CAP && inst.stamps.filter(t => now - t < 60000).length < NET_MIN_CAP;
+}
+async function netAcquire(prio, signal){
+  const waitStart = Date.now();
+  for(;;){
+    if(signal && signal.aborted) throw Object.assign(new Error('Aborted'), {name:'AbortError'});
+    if(prio === 'bg' && document.hidden) throw Object.assign(new Error('Background work paused while hidden'), {skip:true});
+    const now = Date.now();
+    const insts = netInstanceUrls().map(netInst);
+    const usable = insts.filter(i => i.until <= now);
+    if(!usable.length){
+      const until = Math.min(...insts.map(i => i.until));
+      if(until - now > 20000) throw Object.assign(new Error('Invidious servers are paused until ' + clockTime(until)), {blocked:true, until});
+    } else {
+      if(prio === 'bg'){
+        NET.bgStamps = NET.bgStamps.filter(t => now - t < 600000);
+        if(NET.bgStamps.length >= NET_BG_BUDGET) throw Object.assign(new Error('Background request budget used'), {budget:true});
+      }
+      const ready = usable.filter(i => i.active < 2 && now >= i.nextStart && netWindowOk(i, prio, now) &&
+                                       (prio !== 'bg' || (NET.bgActive === 0 && now >= NET.bgNext)));
+      if(ready.length){
+        ready.sort(prio === 'user'
+          ? (a, b) => insts.indexOf(a) - insts.indexOf(b)
+          : (a, b) => (a.active - b.active) || (a.nextStart - b.nextStart) || (insts.indexOf(b) - insts.indexOf(a)));
+        const inst = ready[0];
+        inst.active++;
+        inst.nextStart = now + (prio === 'user' ? 500 : prio === 'bg' ? 2000 : 1400) + Math.random() * 250;
+        inst.stamps.push(now);
+        if(prio === 'bg'){ NET.bgActive++; NET.bgNext = now + 2000 + Math.random() * 500; NET.bgStamps.push(now); }
+        return inst;
+      }
     }
-    if(!response.ok)throw Object.assign(new Error('Request failed ('+response.status+').'),{status:response.status});
-    return response;
-  }catch(e){
-    if(e.name==='AbortError'&&!(sig&&sig.aborted))throw Object.assign(new Error('Couldn’t reach the Invidious instance. It may be down — try again shortly.'),{busy:true});
-    throw e;
-  }finally{clearTimeout(timer);}
+    await sleep(80);
+    if(prio !== 'user' && Date.now() - waitStart > 180000) throw Object.assign(new Error('Instance is busy — try again shortly.'), {busy:true});
+  }
+}
+async function netFetch(path, opts = {}){
+  const prio = opts.prio || 'user', signal = opts.signal;
+  let lastErr = Object.assign(new Error('Instance is busy — try again shortly.'), {busy:true});
+  for(let attempt = 0; attempt < 2; attempt++){
+    const inst = await netAcquire(prio, signal);
+    const ctl = new AbortController();
+    let res = null;
+    const timer = setTimeout(() => ctl.abort(), 12000);
+    if(signal){ if(signal.aborted) ctl.abort(); else signal.addEventListener('abort', () => ctl.abort(), {once:true}); }
+    try{
+      res = await fetch(inst.url + path, { signal: ctl.signal, headers: {Accept:'application/json'} });
+    }catch(e){
+      if(signal && signal.aborted) throw Object.assign(new Error('Aborted'), {name:'AbortError'});
+      netFail(inst);
+      lastErr = Object.assign(new Error('Couldn’t reach the Invidious instance. It may be down — try again shortly.'), {busy:true});
+    }finally{
+      clearTimeout(timer); inst.active--; if(prio === 'bg') NET.bgActive--;
+    }
+    if(!res) continue;
+    if(res.status === 403){ netPause(inst, 30 * 60000); lastErr = Object.assign(new Error('Blocked by the instance'), {status:403, busy:true}); continue; }
+    if(res.status === 429){
+      inst.strikes++;
+      const ra = parseFloat(res.headers.get('Retry-After'));
+      netPause(inst, Math.max(30000, Number.isFinite(ra) ? Math.min(ra, 1800) * 1000 : Math.min(60000 * Math.pow(2, inst.strikes - 1), 30 * 60000)));
+      lastErr = Object.assign(new Error('Instance is busy — try again shortly.'), {status:429, busy:true}); continue;
+    }
+    if(res.status >= 500){ netFail(inst); lastErr = Object.assign(new Error('Instance is busy — try again shortly.'), {status:res.status, busy:true}); continue; }
+    if(!res.ok) throw Object.assign(new Error('Request failed (' + res.status + ').'), {status:res.status});
+    if(!/json/i.test(res.headers.get('content-type') || '')){ netPause(inst, 30 * 60000); lastErr = Object.assign(new Error('Blocked by the instance'), {busy:true}); continue; }
+    inst.fails = 0;
+    if(++inst.ok >= 10) inst.strikes = 0;
+    return res;
+  }
+  throw lastErr;
+}
+/* Kept for the existing call sites: full URL (PROXY + path) in, Response out. */
+async function apiFetch(url, options = {}){
+  if(typeof url !== 'string' || !url.startsWith(PROXY)) throw new Error('Bad request');
+  return netFetch(url.slice(PROXY.length), { signal: options.signal, prio: options.prio });
 }
 
 if('serviceWorker' in navigator){
@@ -1703,9 +1815,24 @@ function getCachedVideos(channelId){
     const raw = localStorage.getItem('ft_vc_v2_' + channelId);
     if(!raw) return null;
     const {ts, videos} = JSON.parse(raw);
-    if(Date.now() - ts > CACHE_TTL) return null;
+    if(Date.now() - ts > channelTtl(videos)) return null;
     return videos;
   } catch(e){ return null; }
+}
+/* Per-channel freshness: a channel that posted in the last 24h is very unlikely to post again soon
+   (12h). Others get 3h-12h depending on how often they usually post (average gap between videos / 6). */
+function channelTtl(videos){
+  const H = 3600000;
+  if(!Array.isArray(videos) || !videos.length) return 3 * H;
+  const ts = videos.slice(0, 6).map(publishedTs).filter(t => t !== null).sort((a, b) => b - a);
+  if(!ts.length) return 3 * H;
+  if(Date.now() - ts[0] < 24 * H) return 12 * H;
+  if(ts.length >= 3) return Math.min(12 * H, Math.max(3 * H, (ts[0] - ts[ts.length - 1]) / (ts.length - 1) / 6));
+  return 3 * H;
+}
+function cacheAge(channelId){
+  try{ const {ts} = JSON.parse(localStorage.getItem('ft_vc_v2_' + channelId) || 'null') || {}; return Number.isFinite(ts) ? Date.now() - ts : Infinity; }
+  catch(e){ return Infinity; }
 }
 /* Stale-while-revalidate: a channel list older than CACHE_TTL is still shown instantly
    while a fresh copy is fetched silently in the background, as long as it is inside the
@@ -1796,6 +1923,10 @@ async function repairChannelAvatar(img, id){
   if(img){ img.removeAttribute('onerror'); img.remove(); }
   if(!YOUTUBE_CHANNEL_ID_RE.test(id) || avatarAttempted.has(id)) return;
   avatarAttempted.add(id);
+  /* One repair request per channel per week, never while a server is paused. */
+  let tried = {}; try{ tried = JSON.parse(localStorage.getItem('ns_avatar_tried') || '{}') || {}; }catch(e){}
+  if(Date.now() - (tried[id] || 0) < 7 * 86400000 || netPausedUntil()) return;
+  tried[id] = Date.now(); try{ localStorage.setItem('ns_avatar_tried', JSON.stringify(tried)); }catch(e){}
   try{
     const data = await silentApiJson('/api/v1/search?type=channel&q=' + encodeURIComponent(id));
     const list = Array.isArray(data) ? data.map(invChannel) : [];
@@ -2177,6 +2308,7 @@ async function runForegroundMaintenance(fromResume){
   if(maintenanceRunning) return;
   if(!STORE.hasLaunched || !STORE.policyAccepted) return;
   if(!hasStaleMetadata()) return;
+  if(netPausedUntil()) return;
 
   /* Throttle: at most once every 3 hours. On failure the key is not updated,
      so the next foreground event is eligible to retry immediately. */
@@ -2209,14 +2341,21 @@ async function runForegroundMaintenance(fromResume){
 }
 
 /* Silent Invidious read: never surfaces UI, returns null on any failure. */
+/* Silent background read (metadata refresh): lowest priority, shares the small background budget,
+   and pauses 45s after every 10 requests (batches of 10). Never shows UI, returns null on any failure. */
+let bgBatchCount = 0;
 async function silentApiJson(path, timeoutMs, meta){
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs || 10000);
   try{
-    const res = await fetch(invUrl(path), {signal: ctl.signal, headers: {Accept: 'application/json'}});
-    if(res.status === 404 && meta) meta.notFound = true;
-    return res.ok ? await res.json() : null;
-  }catch(e){ return null; }
-  finally{ clearTimeout(timer); }
+    if(++bgBatchCount % 10 === 0) await sleep(45000);
+    const res = await netFetch(path, { prio:'bg' });
+    return await res.json();
+  }catch(e){
+    if(meta){
+      if(e && e.status === 404) meta.notFound = true;
+      if(e && (e.skip || e.budget || e.blocked)) meta.skipped = true;
+    }
+    return null;
+  }
 }
 
 function patchChannelDom(ch){
@@ -2246,6 +2385,7 @@ async function refreshChannelMetadata(){
       apiMetadataTried.set('c:' + id, Date.now());
       const meta = {};
       const data = await silentApiJson('/api/v1/search?type=channel&q=' + encodeURIComponent(id), undefined, meta);
+      if(meta.skipped){ apiMetadataTried.delete('c:' + id); return; }
       const list = Array.isArray(data) ? data.map(invChannel) : [];
       if(list.length === 0 && meta.notFound){
         /* YouTube says this channel no longer exists: drop its stored data, keep the ID in the user's list,
@@ -2430,69 +2570,42 @@ function resolveHandle(ch) {
   return '';
 }
 
-/* Adaptive throttle shared by every channel request. A 429/5xx/timeout halves the number of
-   simultaneous requests and pauses new ones (honouring Retry-After); a run of successes
-   brings the speed back up. This is what stops a public instance from rate-limiting us. */
-const throttle = { limit:6, max:6, active:0, streak:0, backoffUntil:0 };
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-function throttleBusy(retryAfterMs){
-  throttle.limit = Math.max(1, Math.floor(throttle.limit / 2));
-  throttle.streak = 0;
-  throttle.backoffUntil = Math.max(throttle.backoffUntil, Date.now() + (retryAfterMs || 2500));
-}
-function throttleOk(){
-  if(++throttle.streak >= 4 && throttle.limit < throttle.max){ throttle.limit++; throttle.streak = 0; }
-}
-async function throttleAcquire(){
-  while(Date.now() < throttle.backoffUntil || throttle.active >= throttle.limit) await sleep(100);
-  throttle.active++;
-}
-
 /* Slim response: ask Invidious for only the fields we use (much smaller + faster).
    If an instance ignores/rejects `fields`, the retry falls back to the full response. */
 const VIDEO_FIELDS = 'videos(videoId,title,author,authorId,published,publishedText,lengthSeconds,viewCount,videoThumbnails)';
-async function fetchVideosCV(channelId, handle, externalSignal, slim) {
+async function fetchVideosCV(channelId, handle, externalSignal, slim, prio) {
   void handle; // Invidious resolves channels by ID
   const path = `/api/v1/channels/${encodeURIComponent(channelId)}/videos?sort_by=newest` +
                (slim ? '&fields=' + encodeURIComponent(VIDEO_FIELDS) : '');
-  await throttleAcquire();
-  try{
-    const res  = await apiFetch(invUrl(path), { signal: externalSignal });
-    const data = await res.json();
-    if (!data || !Array.isArray(data.videos)) throw new Error('Invalid Channel Videos response format');
-    throttleOk();
-    return data.videos.map(invVideo);
-  }catch(e){
-    if(e && e.busy) throttleBusy(e.retryAfter);
-    throw e;
-  }finally{ throttle.active--; }
+  const res  = await netFetch(path, { signal: externalSignal, prio });
+  const data = await res.json();
+  if (!data || !Array.isArray(data.videos)) throw new Error('Invalid Channel Videos response format');
+  return data.videos.map(invVideo);
 }
-
-async function fetchVideosCVWithRetry(channelId, handle, externalSignal) {
-  let lastError;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (externalSignal && externalSignal.aborted) throw new Error('Superseded');
-    try {
-      return await fetchVideosCV(channelId, handle, externalSignal, attempt === 0);
-    } catch(e) {
-      lastError = e;
-      if (externalSignal && externalSignal.aborted) throw e;
-      if (e && e.status === 404) throw e;                    // gone for good: do not retry
-      if (attempt < 2) await sleep(300 * (attempt + 1) + Math.random() * 300); // the throttle gate adds any backoff
-    }
+/* Only a malformed answer is retried here (once, without `fields`). Busy/blocked errors are
+   already handled by the scheduler and must NOT be retried again (that is what got us blocked). */
+async function fetchVideosCVWithRetry(channelId, handle, externalSignal, prio) {
+  try{
+    return await fetchVideosCV(channelId, handle, externalSignal, true, prio);
+  }catch(e){
+    if(e && (e.busy || e.blocked || e.budget || e.skip || e.status || e.name === 'AbortError')) throw e;
+    return await fetchVideosCV(channelId, handle, externalSignal, false, prio);
   }
-  throw lastError;
 }
 
 /* One request per channel at a time (Today, Channels and the channel page share it),
    and a failed refresh never touches the old cache. */
 const inflightVideos = new Map();
 const lastTriedAt = new Map();
-function loadChannelVideosOnce(ch){
+function loadChannelVideosOnce(ch, prio){
   if(inflightVideos.has(ch.id)) return inflightVideos.get(ch.id);
+  if(prio && todayLoad.running){                       // per-run request cap
+    if(todayLoad.budget <= 0) return Promise.reject(Object.assign(new Error('Request budget used'), {budget:true}));
+    todayLoad.budget--;
+  }
   lastTriedAt.set(ch.id, Date.now());
   const p = (async () => {
-    const videos = await fetchVideosCVWithRetry(ch.id, resolveHandle(ch));
+    const videos = await fetchVideosCVWithRetry(ch.id, resolveHandle(ch), undefined, prio || 'user');
     setCachedVideos(ch.id, videos);
     return videos;
   })().finally(() => inflightVideos.delete(ch.id));
@@ -2500,54 +2613,58 @@ function loadChannelVideosOnce(ch){
   return p;
 }
 
-/* Stale-while-revalidate loader (what the original did): channels that are stale or
-   missing are fetched in a staggered pool, most-watched first. `force` refreshes
-   everything but keeps showing the old data until new data lands. */
-const todayLoad = { running:false, phase:'', loaded:0, total:0, failed:0, promise:null };
-const TODAY_CONCURRENCY = 8;
-const TODAY_RETRY_COOLDOWN = 2 * 60 * 1000;
-const TODAY_MAX_SWEEPS = 8;
-function ensureTodayCaches(force){
+/* Stale-while-revalidate loader. Only channels whose adaptive TTL expired (or that have no cache)
+   are fetched. prio 'reload' = you pressed Reload / first load, 'bg' = automatic (small budget).
+   Cap per run = 1.3 requests per channel. On a block the run stops at once and keeps old data. */
+const todayLoad = { running:false, phase:'', loaded:0, total:0, failed:0, failedNames:[], blockedUntil:0, budget:0, promise:null };
+const TODAY_RETRY_COOLDOWN = 5 * 60 * 1000;
+const RELOAD_MIN_AGE = 10 * 60 * 1000;
+const TODAY_MAX_SWEEPS = 2;
+function ensureTodayCaches(force, prio){
+  prio = prio || (force ? 'reload' : 'bg');
   if(todayLoad.running) return todayLoad.promise;
+  if(netPausedUntil()) return Promise.resolve();
   const now = Date.now();
-  const queue = sortByLeastWatchedLast(STORE.channels).filter(ch =>
-    force || (!getCachedVideos(ch.id) && now - (lastTriedAt.get(ch.id) || 0) > TODAY_RETRY_COOLDOWN));
-  todayLoad.loaded = 0; todayLoad.failed = 0; todayLoad.total = queue.length; todayLoad.phase = 'load';
+  let queue = sortByLeastWatchedLast(STORE.channels).filter(ch => force
+    ? cacheAge(ch.id) > RELOAD_MIN_AGE
+    : (!getCachedVideos(ch.id) && now - (lastTriedAt.get(ch.id) || 0) > TODAY_RETRY_COOLDOWN));
+  if(prio === 'bg') queue = queue.slice(0, 12);
+  todayLoad.loaded = 0; todayLoad.failed = 0; todayLoad.failedNames = []; todayLoad.blockedUntil = 0;
+  todayLoad.total = queue.length; todayLoad.phase = 'load';
+  todayLoad.budget = Math.ceil(queue.length * 1.3) + 2;
   if(!queue.length) return Promise.resolve();
   todayLoad.running = true;
 
-  const failedNow = [];          // retry later
-  let permanent = 0;             // 404 etc: never retried
+  const failedNow = [];
+  let permanent = 0, stopped = false;
   const runPass = async (list, lanes) => {
     const q = list.slice();
     const lane = async () => {
-      while(q.length){
+      while(q.length && !stopped){
         const ch = q.shift();
-        try{ await loadChannelVideosOnce(ch); todayLoad.loaded++; }
+        try{ await loadChannelVideosOnce(ch, prio); todayLoad.loaded++; }
         catch(e){
-          if(e && e.status === 404) permanent++;
-          else failedNow.push(ch);
-          console.warn(`[NoSuggest] ${ch.id} not loaded yet:`, e && e.message);
+          if(e && (e.blocked || e.budget || e.skip)){ stopped = true; if(e.blocked) todayLoad.blockedUntil = e.until; failedNow.push(ch); return; }
+          if(e && e.status === 404) permanent++; else failedNow.push(ch);
+          console.warn(`[NoSuggest] ${ch.id} not loaded:`, e && e.message);
         }
       }
     };
     const ls = [];
-    for(let i = 0; i < Math.min(lanes, q.length); i++) ls.push(sleep(i * 80).then(lane));
+    for(let i = 0; i < Math.min(lanes, q.length); i++) ls.push(sleep(i * 100).then(lane));
     await Promise.all(ls);
   };
 
   todayLoad.promise = (async () => {
-    await runPass(queue, TODAY_CONCURRENCY);
-    /* Sweeps: keep going back to the channels that failed, slowly (2 at a time, growing pauses),
-       until every channel is loaded. The mini loader shows how many are left. */
-    for(let sweep = 1; failedNow.length && sweep <= TODAY_MAX_SWEEPS; sweep++){
+    await runPass(queue, 4);   // the scheduler (2 per server, paced) decides the real speed
+    /* Gentle sweeps for channels that failed for a non-block reason; stops on block/budget. */
+    for(let sweep = 1; failedNow.length && !stopped && sweep <= TODAY_MAX_SWEEPS && todayLoad.budget > 0; sweep++){
       todayLoad.phase = 'retry';
-      await sleep(Math.min(1200 * sweep, 6000));
-      const batch = failedNow.splice(0);
-      await runPass(batch, 2);
+      await sleep(8000 * sweep);
+      await runPass(failedNow.splice(0), 2);
     }
     todayLoad.failed = failedNow.length + permanent;
-    todayLoad.failedNames = failedNow.concat([]).map(c => c.name);
+    todayLoad.failedNames = failedNow.map(c => c.name);
   })().finally(() => { todayLoad.running = false; todayLoad.phase = ''; });
   return todayLoad.promise;
 }
@@ -2720,7 +2837,7 @@ function initToday(){
       <h3>Loading your channels…</h3>
       <p>Gathering the latest uploads</p>
     </div>`;
-    ensureTodayCaches();
+    ensureTodayCaches(false, 'reload');
     watchTodayLoad(false);
     return;
   }
@@ -2738,29 +2855,31 @@ function stopTodayWatch(){
   todayPollTimer = null;
   const mini = document.getElementById('today-mini-loader');
   if(mini) mini.hidden = true;
+  const rb = document.getElementById('feed-refresh-btn');
+  if(rb) rb.disabled = false;
   todayReloading = false;
 }
 const todaySig = list => list.map(v => v.id).join(',');
 
-/* Watches the loader. Re-renders ONLY when the set of videos changes (cards are never
-   replaced under a tap) and always stops itself. With `withOverlay`, the first visible
-   video swaps the full-screen overlay for the header mini-loader (progress / "↻ N left"),
-   which stays until every channel is loaded. */
+/* Watches the loader. Re-renders ONLY when the set of videos changes (cards are never replaced
+   under a tap) and always stops itself. The mini loader (top right) shows ANY running refresh,
+   manual or automatic, and Reload is disabled meanwhile so you cannot stack a second one. */
 function watchTodayLoad(withOverlay){
   stopTodayWatch();
   const mini = document.getElementById('today-mini-loader');
   const label = document.getElementById('today-mini-label');
+  const btn = document.getElementById('feed-refresh-btn');
   let lastSig = null, overlayUp = !!withOverlay, tries = 0;
   if(withOverlay) todayReloading = true;
   const finish = () => {
     if(overlayUp){ hideLoadingOverlay(); overlayUp = false; }
     const failed = todayLoad.failed, total = todayLoad.total, names = todayLoad.failedNames || [];
-    const finished = !todayLoad.running;
+    const finished = !todayLoad.running, blocked = todayLoad.blockedUntil;
     stopTodayWatch();
-    if(withOverlay && finished && failed > 0){
-      toast(failed === total ? "Couldn't reach the Invidious instance. Try again or change it in Settings."
-          : failed <= 3 && names.length ? `Couldn't load: ${names.join(', ')}. Tap Reload to retry.`
-          : `${failed} channel${failed === 1 ? '' : 's'} still couldn't load. Tap Reload to retry.`, 6000);
+    if(withOverlay && finished && failed > 0 && !blocked){
+      toast(failed === total ? "Couldn't reach the Invidious instance. Try again later or change it in Settings."
+          : failed <= 3 && names.length ? `Couldn't load: ${names.join(', ')}. They'll retry automatically later.`
+          : `${failed} channel${failed === 1 ? '' : 's'} couldn't load. They'll retry automatically later.`, 6000);
     }
   };
   const tick = () => {
@@ -2772,25 +2891,25 @@ function watchTodayLoad(withOverlay){
       lastSig = sig;
       renderToday(fresh);
     }
-    if(allDone || ++tries > 900){ finish(); return; }   // ~6 min safety cap
-    if(overlayUp && fresh.length > 0){
-      hideLoadingOverlay();
-      overlayUp = false;
-      if(mini) mini.hidden = false;
-    }
-    if(!overlayUp && withOverlay && label) label.textContent = todayProgressLabel();
+    if(btn) btn.disabled = !allDone;
+    if(allDone || ++tries > 900){ finish(); return; }
+    if(overlayUp && fresh.length > 0){ hideLoadingOverlay(); overlayUp = false; }
+    if(!overlayUp){ if(mini) mini.hidden = false; if(label) label.textContent = todayProgressLabel(); }
   };
   todayPollTimer = setInterval(tick, 400);
   tick();
 }
 
-/* Reload: overlay -> first video shrinks it to the mini loader. Old videos stay visible
-   (and clickable) while fresh data streams in. */
+/* Reload: overlay -> first video shrinks it to the mini loader. Old videos stay visible and clickable
+   while fresh data streams in. Channels refreshed within the last 10 min are skipped. */
 function reloadToday(){
-  if(todayReloading) return;
+  if(todayReloading || todayLoad.running){ toast('Already refreshing, one moment…', 2500); return; }
   if(!STORE.channels.length){ toast('Add some channels first'); return; }
+  const until = netPausedUntil();
+  if(until){ toast(`Servers are paused until ${clockTime(until)} to avoid a block. Showing saved videos.`, 5000); return; }
+  if(!STORE.channels.some(ch => cacheAge(ch.id) > RELOAD_MIN_AGE)){ toast('Everything was refreshed in the last 10 minutes.', 3500); return; }
   showLoadingOverlay('Loading videos…', 'Fetching from the Invidious instance');
-  ensureTodayCaches(true);
+  ensureTodayCaches(true, 'reload');
   watchTodayLoad(true);
 }
 
@@ -3895,9 +4014,25 @@ function changeInvidiousInstance(){
   setTimeout(() => location.reload(), 700);
 }
 
+/* Second server: splits the load (searches use the first, reload/background prefer this one).
+   Type "off" to use only one server. */
+function changeSecondInstance(){
+  const raw = localStorage.getItem('ns_invidious_instance2');
+  const cur = raw === null ? NET_DEFAULT_2 : raw;
+  const url = (prompt('Second Invidious server URL (type "off" to use only one server):', cur) || '').trim();
+  if(!url) return;
+  const clean = url.replace(/\/+$/,'');
+  if(clean.toLowerCase() !== 'off' && !/^https?:\/\/[^\s]+$/i.test(clean)){ toast("That doesn't look like a valid URL."); return; }
+  try{ localStorage.setItem('ns_invidious_instance2', clean.toLowerCase() === 'off' ? 'off' : clean); }catch(e){}
+  toast('Saved. Reloading…');
+  setTimeout(() => location.reload(), 600);
+}
 function initSettings(){
   const isub = document.getElementById('instance-row-sub');
-  if(isub) isub.textContent = PROXY;
+  const instSub = u => u + (NET.blocks[u] > Date.now() ? ' · paused until ' + clockTime(NET.blocks[u]) : '');
+  if(isub) isub.textContent = instSub(PROXY);
+  const isub2 = document.getElementById('instance2-row-sub');
+  if(isub2){ const r = localStorage.getItem('ns_invidious_instance2'); isub2.textContent = r === 'off' ? 'Off (using one server)' : instSub((r === null ? NET_DEFAULT_2 : r).replace(/\/+$/,'')); }
   const row = document.getElementById('settings-install-row');
   if(row){
     
