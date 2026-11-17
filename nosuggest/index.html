@@ -2805,7 +2805,7 @@ function renderToday(videos){
             <button class="feed-save-btn" onclick="event.stopPropagation();hideFromToday('${esc(v.id)}')" title="Hide from Today" aria-label="Hide from Today">
               <svg width="12" height="12" viewBox="0 0 24 24" stroke-width="2" fill="none" stroke="var(--faint)"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
-            <button class="feed-save-btn" onclick="event.stopPropagation();toggleFeedSaveById('${esc(v.id)}','${esc(v.channelId || '')}')">
+            <button class="feed-save-btn" onclick="event.stopPropagation();toggleFeedSaveById('${esc(v.id)}','${esc(v.channelId || '')}',this)">
               <svg width="12" height="12" viewBox="0 0 24 24" stroke-width="2" fill="${savedNow?'var(--accent)':'none'}" stroke="${savedNow?'var(--accent)':'var(--faint)'}"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
             </button>
           </div>
@@ -3017,11 +3017,11 @@ function openPlayerById(videoId, chId){
   if(!v) return;
   openPlayer(v.id, v.title, ch.name||'', v.publishedAt||'', v.thumb||'');
 }
-function toggleFeedSaveById(videoId, chId){
+function toggleFeedSaveById(videoId, chId, btn){
   const v  = VIDEO_DATA[videoId];
   const ch = STORE.channels.find(c => c.id === chId) || {};
   if(!v) return;
-  const btn = document.querySelector(`.feed-save-btn[onclick*="'${videoId}'"]`);
+  if(!btn) btn = document.querySelector(`#feed-body .feed-save-btn[onclick*="'${videoId}'"]`);
   toggleFeedSave(btn, v.id, v.title, ch.name||'', v.publishedAt||'', v.thumb||'');
 }
 
