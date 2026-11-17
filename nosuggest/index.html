@@ -315,11 +315,44 @@ body.show-install-strip .screen-body{padding-bottom:calc(116px + var(--safe-bot)
 #today-body .feed-orbit::after{width:9px;height:9px;right:5px;bottom:5px;background:var(--accent2);box-shadow:0 0 14px rgba(255,107,53,.55);}
 @media(min-width:760px){.today-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;}}
 
-/* Themes page: channels grouped into user-created theme columns.
-   Columns scroll horizontally on phones, grid on desktop. */
-.themes-wrap{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(230px,260px);gap:12px;overflow-x:auto;padding:0 1.25rem 1.5rem;align-items:start;-webkit-overflow-scrolling:touch;}
-@media(min-width:760px){.themes-wrap{grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));overflow-x:visible;}}
-.theme-col{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;min-height:160px;transition:border-color 0.15s,background 0.15s;}
+/* channels grouped into user-created theme columns.
+Themes page: horizontal scrolling on phones, masonry on desktop. */
+.themes-wrap{
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(230px,260px);
+  gap:12px;
+  overflow-x:auto;
+  padding:0 1.25rem 1.5rem;
+  align-items:start;
+  -webkit-overflow-scrolling:touch;
+}
+
+.theme-col{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:0.75rem;
+  min-height:0;
+  transition:border-color 0.15s,background 0.15s;
+}
+
+@media(min-width:760px){
+  .themes-wrap{
+    display:block;
+    column-width:230px;
+    column-gap:12px;
+    overflow:visible;
+  }
+
+  .theme-col{
+    display:inline-block;
+    width:100%;
+    break-inside:avoid;
+    margin-bottom:12px;
+    vertical-align:top;
+  }
+}
 .theme-col.dragover{border-color:var(--accent);background:var(--bg3);}
 .theme-col-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 0.25rem 0.6rem;border-bottom:1px solid var(--border);margin-bottom:0.35rem;}
 .theme-col-head h3{font-family:'Fraunces',serif;font-size:1rem;font-weight:500;color:var(--text);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
