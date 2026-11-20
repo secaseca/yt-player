@@ -1,0 +1,1458 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#282828">
+<title>Math Exercise Tracker</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #282828;
+  --panel: #32302f;
+  --surface: #3c3836;
+  --surface2: #504945;
+  --border: #665c54;
+  --text: #ebdbb2;
+  --muted: #a89984;
+  --yellow: #fabd2f;
+  --green: #b8bb26;
+  --red: #fb4934;
+  --blue: #83a598;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 26px 30px 40px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+main {
+  width: 100%;
+  max-width: 1700px;
+  margin: auto;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+h1 {
+  font-size: 27px;
+  line-height: 1.2;
+  margin: 0 0 5px;
+}
+
+h2 { font-size: 16px; margin: 0; }
+
+p { color: var(--muted); }
+
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 17px;
+}
+
+.section-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Dashboard layout */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 390px);
+  grid-template-areas:
+    "overview overview"
+    "chart sidebar"
+    "bottom bottom";
+  gap: 16px;
+  align-items: start;
+}
+
+.overview { grid-area: overview; }
+
+.chart-panel {
+  grid-area: chart;
+  min-height: 100%;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.bottom-grid {
+  grid-area: bottom;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.bottom-grid > .panel { min-width: 0; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  min-width: 0;
+  padding: 15px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.stat-note {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.progress-track {
+  height: 10px;
+  border-radius: 20px;
+  background: var(--surface2);
+  overflow: hidden;
+  margin: 13px 0 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--green);
+  border-radius: inherit;
+  transition: width .25s;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Inputs */
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+}
+
+input:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+input[type="number"] { font-variant-numeric: tabular-nums; }
+
+button {
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--yellow);
+  color: #282828;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover { filter: brightness(1.08); }
+
+button.secondary {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+button.danger {
+  padding: 5px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--red);
+  font-size: 12px;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+
+.entry-grid button {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.setting-help {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Chart */
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: clamp(340px, 38vw, 520px);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-description {
+  margin: -8px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 17px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.legend-band {
+  width: 15px;
+  height: 9px;
+  background: rgba(250,189,47,.18);
+  border: 1px solid var(--yellow);
+  border-radius: 2px;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+  padding: 9px 11px;
+  background: #1d2021;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  white-space: nowrap;
+}
+
+/* Streaks */
+
+.streak-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.streak-message {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+/* History */
+
+.history-details {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.history-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.history-details summary::-webkit-details-marker { display: none; }
+
+.history-details summary::after {
+  content: "+";
+  color: var(--yellow);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.history-details[open] summary::after { content: "−"; }
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.history-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-date { font-size: 13px; }
+
+.history-count {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.empty {
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.small-note {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 12px 0 0;
+}
+
+footer {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  margin-top: 22px;
+}
+
+/* Responsive */
+
+@media (min-width: 1500px) {
+  body { padding: 32px 42px 50px; }
+  .dashboard { gap: 20px; }
+  .sidebar { gap: 20px; }
+  .bottom-grid { gap: 20px; }
+  .chart-wrap { height: 480px; }
+}
+
+@media (max-width: 950px) {
+  body { padding: 22px 18px 35px; }
+
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+  }
+
+  .stats { gap: 8px; }
+  .stat { padding: 12px; }
+  .stat-value { font-size: 22px; }
+  .chart-wrap { height: 350px; }
+}
+
+@media (max-width: 720px) {
+  body { padding: 18px 12px 30px; }
+
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "overview"
+      "chart"
+      "sidebar"
+      "bottom";
+  }
+
+  .bottom-grid { grid-template-columns: 1fr; }
+  .chart-wrap { height: 300px; }
+}
+
+@media (max-width: 480px) {
+  header { margin-bottom: 16px; }
+  h1 { font-size: 23px; }
+  .panel { padding: 15px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-grid { grid-template-columns: 1fr; }
+  .chart-wrap { height: 260px; }
+  .stat-value { font-size: 21px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Math Exercise Tracker</h1>
+      <p class="subtitle">Track your work. Build consistency. Reach your target.</p>
+    </div>
+  </header>
+
+  <div class="dashboard">
+
+    <!-- OVERVIEW -->
+    <section class="panel overview">
+      <div class="section-heading">
+        <h2>Overall progress</h2>
+        <span class="section-note" id="percent">0%</span>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Completed</div>
+          <div class="stat-value" id="done">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Remaining</div>
+          <div class="stat-value" id="remaining">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Daily average</div>
+          <div class="stat-value" id="average">0</div>
+          <div class="stat-note">Since start date</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Predicted finish</div>
+          <div class="stat-value" id="prediction">—</div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="progress-track">
+          <div class="progress-fill" id="progressBar"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="progressDone">0 completed</span>
+          <span id="progressTarget">Target: 0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN CHART -->
+    <section class="panel chart-panel">
+      <div class="section-heading">
+        <h2>Daily exercises</h2>
+        <span class="section-note" id="chartPeriod">No data yet</span>
+      </div>
+
+      <p class="chart-description">
+        Daily exercises compared with the rolling average. The shaded band is your target range.
+      </p>
+
+      <div class="chart-wrap" id="chartWrap">
+        <canvas id="chart" aria-label="Daily exercises and rolling average line graph"></canvas>
+        <div class="tooltip" id="chartTooltip"></div>
+      </div>
+
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-line" style="background:var(--green)"></span>Daily exercises</span>
+        <span class="legend-item"><span class="legend-line" style="background:var(--blue)"></span>Rolling average</span>
+        <span class="legend-item"><span class="legend-band"></span>Tolerance band</span>
+      </div>
+    </section>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="sidebar">
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Log exercises</h2>
+        </div>
+
+        <div class="entry-grid">
+          <div>
+            <label for="entryDate">Date</label>
+            <input type="date" id="entryDate">
+          </div>
+          <div>
+            <label for="amount">Exercises completed</label>
+            <input type="number" id="amount" min="1" step="1" placeholder="e.g. 15">
+          </div>
+          <button id="addButton">Add entry</button>
+        </div>
+
+        <p class="small-note">Multiple entries on the same date are added together.</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Daily consistency</h2>
+        </div>
+
+        <div class="streak-grid">
+          <div class="stat">
+            <div class="stat-label">Current streak</div>
+            <div class="stat-value" id="currentStreak">0 days</div>
+            <div class="stat-note">Consecutive days</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Longest streak</div>
+            <div class="stat-value" id="bestStreak">0 days</div>
+            <div class="stat-note">Personal record</div>
+          </div>
+        </div>
+
+        <p class="streak-message" id="streakMessage">Log at least one exercise to start a streak.</p>
+      </section>
+
+    </div>
+
+    <!-- BOTTOM GRID -->
+    <div class="bottom-grid">
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Settings</h2>
+        </div>
+
+        <div class="settings-grid">
+          <div>
+            <label for="targetInput">Exercise target</label>
+            <input type="number" id="targetInput" min="0" step="1">
+            <div class="setting-help">Your total exercise goal.</div>
+          </div>
+
+          <div>
+            <label for="startDateInput">Start date</label>
+            <input type="date" id="startDateInput">
+            <div class="setting-help">Used for the graph and daily average.</div>
+          </div>
+
+          <div>
+            <label for="rollingInput">Rolling average (days)</label>
+            <input type="number" id="rollingInput" min="1" max="365" step="1">
+            <div class="setting-help">Calendar days, including days with zero exercises.</div>
+          </div>
+
+          <div>
+            <label for="bandPositionInput">Band position (centre)</label>
+            <input type="number" id="bandPositionInput" min="0" max="100000" step="0.5">
+            <div class="setting-help">For example, 3.5 centres the band between 3 and 4.</div>
+          </div>
+
+          <div>
+            <label for="bandToleranceInput">Band tolerance (± exercises)</label>
+            <input type="number" id="bandToleranceInput" min="0" max="100000" step="0.5">
+            <div class="setting-help">For example, 0.5 creates a band from 3 to 4.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Daily history</h2>
+          <span class="section-note" id="entryCount">0 days</span>
+        </div>
+
+        <details class="history-details">
+          <summary>Show daily entries</summary>
+          <div class="history-list" id="history">
+            <div class="empty">No entries yet.</div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Data management</h2>
+        </div>
+
+        <div class="actions">
+          <button class="secondary" id="exportButton">Export CSV</button>
+          <button class="secondary" id="importButton">Import CSV</button>
+          <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+        </div>
+
+        <p class="small-note">Your data is saved automatically in this browser. Export a CSV backup periodically.</p>
+      </section>
+
+    </div>
+  </div>
+
+  <footer>Math Exercise Tracker · Data stored locally in your browser</footer>
+</main>
+
+<script>
+'use strict';
+
+const STORAGE_KEY = 'mathTrackerV2';
+const DAY_MS = 86400000;
+
+function localToday() {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function dateToMs(date) {
+  const [y, m, d] = date.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+}
+
+function msToDate(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function addDays(date, amount) {
+  return msToDate(dateToMs(date) + amount * DAY_MS);
+}
+
+function validDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return false;
+  const [y, m, d] = date.split('-').map(Number);
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  return parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+}
+
+function formatDate(date, options = {}) {
+  if (!date) return '—';
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: options.year ? 'numeric' : undefined,
+    timeZone: 'UTC'
+  });
+}
+
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+function clampInteger(value, min, max, fallback) {
+  return Math.floor(clampNumber(value, min, max, fallback));
+}
+
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved && typeof saved === 'object') {
+      const days = {};
+
+      if (saved.days && typeof saved.days === 'object') {
+        for (const [date, count] of Object.entries(saved.days)) {
+          const n = Number(count);
+          if (validDate(date) && Number.isSafeInteger(n) && n > 0) {
+            days[date] = n;
+          }
+        }
+      }
+
+      return {
+        target: clampInteger(saved.target, 0, 1000000000, 0),
+        startDate: validDate(saved.startDate) ? saved.startDate : localToday(),
+        rollingDays: clampInteger(saved.rollingDays, 1, 365, 7),
+        bandPosition: clampNumber(saved.bandPosition, 0, 100000, 3.5),
+        bandTolerance: clampNumber(saved.bandTolerance, 0, 100000, 0.5),
+        days
+      };
+    }
+  } catch (error) {
+    console.warn('Could not load saved data:', error);
+  }
+
+  return {
+    target: 0,
+    startDate: localToday(),
+    rollingDays: 7,
+    bandPosition: 3.5,
+    bandTolerance: 0.5,
+    days: {}
+  };
+}
+
+let state = loadState();
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    alert('Could not save data in this browser. Export a CSV backup.');
+    console.error(error);
+  }
+}
+
+function getStats() {
+  const dates = Object.keys(state.days).sort();
+  const total = dates.reduce((sum, date) => sum + state.days[date], 0);
+  const remaining = Math.max(0, state.target - total);
+  const today = localToday();
+
+  const elapsedDays = Math.max(
+    1,
+    Math.floor((dateToMs(today) - dateToMs(state.startDate)) / DAY_MS) + 1
+  );
+
+  const completedUntilToday = dates
+    .filter(date => date <= today)
+    .reduce((sum, date) => sum + state.days[date], 0);
+
+  const average = completedUntilToday / elapsedDays;
+  let prediction = '—';
+
+  if (state.target > 0 && remaining === 0) {
+    prediction = 'Done';
+  } else if (remaining > 0 && average > 0) {
+    prediction = formatDate(addDays(today, Math.ceil(remaining / average)));
+  }
+
+  return { dates, total, remaining, average, prediction };
+}
+
+function getStreaks() {
+  const dates = Object.keys(state.days)
+    .filter(date => validDate(date) && state.days[date] > 0)
+    .sort();
+
+  if (!dates.length) return { current: 0, best: 0 };
+
+  let best = 0;
+  let run = 0;
+  let previous = null;
+
+  for (const date of dates) {
+    if (previous && dateToMs(date) - dateToMs(previous) === DAY_MS) {
+      run++;
+    } else {
+      run = 1;
+    }
+
+    best = Math.max(best, run);
+    previous = date;
+  }
+
+  const today = localToday();
+  const yesterday = addDays(today, -1);
+  const lastDate = dates[dates.length - 1];
+  let current = 0;
+
+  if (lastDate === today || lastDate === yesterday) {
+    current = 1;
+    let cursor = lastDate;
+
+    for (let i = dates.length - 2; i >= 0; i--) {
+      if (dateToMs(cursor) - dateToMs(dates[i]) === DAY_MS) {
+        current++;
+        cursor = dates[i];
+      } else {
+        break;
+      }
+    }
+  }
+
+  return { current, best };
+}
+
+function render() {
+  const stats = getStats();
+  const streaks = getStreaks();
+
+  document.getElementById('done').textContent = stats.total.toLocaleString();
+  document.getElementById('remaining').textContent = stats.remaining.toLocaleString();
+  document.getElementById('average').textContent = stats.average.toFixed(1);
+  document.getElementById('prediction').textContent = stats.prediction;
+
+  const percent = state.target > 0
+    ? Math.min(100, stats.total / state.target * 100)
+    : 0;
+
+  document.getElementById('percent').textContent = `${percent.toFixed(1)}%`;
+  document.getElementById('progressBar').style.width = `${percent}%`;
+
+  document.getElementById('progressDone').textContent =
+    `${stats.total.toLocaleString()} completed`;
+
+  document.getElementById('progressTarget').textContent =
+    `Target: ${state.target.toLocaleString()}`;
+
+  document.getElementById('currentStreak').textContent =
+    `${streaks.current} ${streaks.current === 1 ? 'day' : 'days'}`;
+
+  document.getElementById('bestStreak').textContent =
+    `${streaks.best} ${streaks.best === 1 ? 'day' : 'days'}`;
+
+  document.getElementById('streakMessage').textContent =
+    streaks.current > 0
+      ? 'Your streak is active. Log at least one exercise tomorrow to keep it going.'
+      : 'No active streak. Log at least one exercise today to start one.';
+
+  document.getElementById('targetInput').value = state.target;
+  document.getElementById('startDateInput').value = state.startDate;
+  document.getElementById('rollingInput').value = state.rollingDays;
+  document.getElementById('bandPositionInput').value = state.bandPosition;
+  document.getElementById('bandToleranceInput').value = state.bandTolerance;
+
+  renderHistory(stats.dates);
+  drawChart();
+}
+
+function renderHistory(dates) {
+  const history = document.getElementById('history');
+  history.innerHTML = '';
+
+  document.getElementById('entryCount').textContent =
+    `${dates.length} ${dates.length === 1 ? 'day' : 'days'}`;
+
+  if (!dates.length) {
+    history.innerHTML = '<div class="empty">No entries yet.</div>';
+    return;
+  }
+
+  dates.slice().reverse().forEach(date => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+
+    const left = document.createElement('div');
+    left.className = 'history-left';
+
+    const dateLabel = document.createElement('span');
+    dateLabel.className = 'history-date';
+    dateLabel.textContent = formatDate(date, { year: true });
+
+    const count = document.createElement('span');
+    count.className = 'history-count';
+    count.textContent = `+${state.days[date].toLocaleString()}`;
+
+    left.append(dateLabel, count);
+
+    const remove = document.createElement('button');
+    remove.className = 'danger';
+    remove.textContent = 'Delete';
+    remove.setAttribute('aria-label', `Delete entry for ${date}`);
+
+    remove.addEventListener('click', () => {
+      if (confirm(`Delete the entry for ${formatDate(date)}?`)) {
+        delete state.days[date];
+        save();
+        render();
+      }
+    });
+
+    item.append(left, remove);
+    history.append(item);
+  });
+}
+
+function getChartData() {
+  const loggedDates = Object.keys(state.days).filter(validDate).sort();
+  if (!loggedDates.length) return [];
+
+  const firstLogged = loggedDates[0];
+  const start = state.startDate < firstLogged ? state.startDate : firstLogged;
+  const today = localToday();
+  const lastLogged = loggedDates[loggedDates.length - 1];
+  const end = today > lastLogged ? today : lastLogged;
+
+  const countDays = Math.round((dateToMs(end) - dateToMs(start)) / DAY_MS);
+  const daily = [];
+
+  for (let i = 0; i <= countDays; i++) {
+    const date = addDays(start, i);
+    daily.push({
+      date,
+      count: state.days[date] || 0
+    });
+  }
+
+  return daily.map((point, i) => {
+    const first = Math.max(0, i - state.rollingDays + 1);
+    let sum = 0;
+
+    for (let j = first; j <= i; j++) {
+      sum += daily[j].count;
+    }
+
+    return {
+      date: point.date,
+      count: point.count,
+      average: sum / (i - first + 1)
+    };
+  });
+}
+
+let chartPoints = [];
+let chartGeometry = null;
+
+function drawChart() {
+  const canvas = document.getElementById('chart');
+  const wrap = document.getElementById('chartWrap');
+  const tooltip = document.getElementById('chartTooltip');
+  const ctx = canvas.getContext('2d');
+  const rect = wrap.getBoundingClientRect();
+
+  if (!rect.width || !rect.height) return;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const width = rect.width;
+  const height = rect.height;
+
+  ctx.clearRect(0, 0, width, height);
+  tooltip.style.display = 'none';
+
+  chartPoints = getChartData();
+
+  if (!chartPoints.length) {
+    document.getElementById('chartPeriod').textContent = 'No data yet';
+
+    ctx.fillStyle = '#a89984';
+    ctx.font = '13px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Log exercises to see your daily graph.', width / 2, height / 2);
+
+    chartGeometry = null;
+    return;
+  }
+
+  document.getElementById('chartPeriod').textContent =
+    `${formatDate(chartPoints[0].date)} – ${formatDate(chartPoints[chartPoints.length - 1].date)}`;
+
+  const pad = { top: 18, right: 16, bottom: 38, left: 43 };
+  const plotW = Math.max(1, width - pad.left - pad.right);
+  const plotH = Math.max(1, height - pad.top - pad.bottom);
+
+  const bandLow = Math.max(0, state.bandPosition - state.bandTolerance);
+  const bandHigh = state.bandPosition + state.bandTolerance;
+
+  const maxValue = Math.max(
+    0,
+    bandHigh,
+    ...chartPoints.map(p => Math.max(p.count, p.average))
+  );
+
+  // At least one exercise of headroom, rounded to a 0.5 step.
+  const yMax = Math.max(1, Math.ceil((maxValue + 1) * 2) / 2);
+
+  const y = value => pad.top + plotH - (value / yMax) * plotH;
+
+  const x = i => chartPoints.length === 1
+    ? pad.left + plotW / 2
+    : pad.left + (i / (chartPoints.length - 1)) * plotW;
+
+  // Tolerance band.
+  const bandTop = y(bandHigh);
+  const bandBottom = y(bandLow);
+
+  ctx.fillStyle = 'rgba(250,189,47,0.11)';
+  ctx.fillRect(pad.left, bandTop, plotW, bandBottom - bandTop);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(250,189,47,0.55)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+
+  [bandHigh, bandLow].forEach(value => {
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y(value));
+    ctx.lineTo(width - pad.right, y(value));
+    ctx.stroke();
+  });
+
+  ctx.restore();
+
+  // Y-axis grid: fixed 0.5 exercise intervals.
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  for (let i = 0; i <= yMax * 2; i++) {
+    const value = i / 2;
+    const py = y(value);
+
+    ctx.strokeStyle = '#504945';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, py);
+    ctx.lineTo(width - pad.right, py);
+    ctx.stroke();
+
+    ctx.fillStyle = '#a89984';
+    ctx.fillText(formatNumber(value), pad.left - 8, py);
+  }
+
+  // Daily exercise line.
+  drawLine(ctx, chartPoints, x, y, 'count', '#b8bb26', 2.3);
+
+  // Rolling average line.
+  drawLine(ctx, chartPoints, x, y, 'average', '#83a598', 2.3);
+
+  // X-axis labels.
+  ctx.fillStyle = '#a89984';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  const labelCount = Math.min(6, chartPoints.length);
+  const labelIndices = new Set();
+
+  if (chartPoints.length === 1) {
+    labelIndices.add(0);
+  } else {
+    for (let i = 0; i < labelCount; i++) {
+      labelIndices.add(Math.round(i * (chartPoints.length - 1) / (labelCount - 1)));
+    }
+  }
+
+  labelIndices.forEach(index => {
+    ctx.fillText(formatDate(chartPoints[index].date), x(index), height - pad.bottom + 12);
+  });
+
+  chartGeometry = { x, pad, plotW };
+}
+
+function drawLine(ctx, points, x, y, key, color, lineWidth) {
+  if (!points.length) return;
+
+  const coords = points.map((point, i) => ({
+    x: x(i),
+    y: y(point[key])
+  }));
+
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  ctx.moveTo(coords[0].x, coords[0].y);
+
+  // Smooth curve using cubic Bézier interpolation.
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[Math.max(0, i - 1)];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[Math.min(coords.length - 1, i + 2)];
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    ctx.bezierCurveTo(
+      cp1x, cp1y,
+      cp2x, cp2y,
+      p2.x, p2.y
+    );
+  }
+
+  ctx.stroke();
+
+  // Markers at actual data points.
+  coords.forEach(point => {
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(point.x, point.y, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function formatNumber(value) {
+  return Number.isInteger(value)
+    ? value.toLocaleString()
+    : value.toFixed(1);
+}
+
+// Chart hover tooltip.
+const canvas = document.getElementById('chart');
+const tooltip = document.getElementById('chartTooltip');
+
+canvas.addEventListener('pointermove', event => {
+  if (!chartGeometry || !chartPoints.length) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const { pad, plotW } = chartGeometry;
+
+  if (mouseX < pad.left || mouseX > pad.left + plotW) {
+    tooltip.style.display = 'none';
+    return;
+  }
+
+  let index = chartPoints.length === 1
+    ? 0
+    : Math.round(((mouseX - pad.left) / plotW) * (chartPoints.length - 1));
+
+  index = Math.max(0, Math.min(chartPoints.length - 1, index));
+  const point = chartPoints[index];
+
+  tooltip.innerHTML = `
+    <strong>${formatDate(point.date, { year: true })}</strong><br>
+    Daily exercises: <strong>${point.count.toLocaleString()}</strong><br>
+    Rolling average: ${point.average.toFixed(2)}<br>
+    Difference: ${(point.count - point.average) > 0 ? '+' : ''}${(point.count - point.average).toFixed(2)}
+  `;
+
+  tooltip.style.display = 'block';
+
+  const tipWidth = tooltip.offsetWidth;
+  const tipHeight = tooltip.offsetHeight;
+
+  let left = chartGeometry.x(index) + 10;
+
+  if (left + tipWidth > rect.width - 5) {
+    left = chartGeometry.x(index) - tipWidth - 10;
+  }
+
+  left = Math.max(5, Math.min(left, rect.width - tipWidth - 5));
+
+  let top = event.clientY - rect.top - tipHeight - 10;
+
+  if (top < 5) top = event.clientY - rect.top + 12;
+
+  top = Math.max(5, Math.min(top, rect.height - tipHeight - 5));
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+});
+
+canvas.addEventListener('pointerleave', () => {
+  tooltip.style.display = 'none';
+});
+
+// Add entries.
+function addEntry() {
+  const date = document.getElementById('entryDate').value;
+  const amount = Number(document.getElementById('amount').value);
+
+  if (!validDate(date)) {
+    alert('Please select a valid date.');
+    return;
+  }
+
+  if (!Number.isSafeInteger(amount) || amount < 1) {
+    alert('Enter a positive whole number of exercises.');
+    return;
+  }
+
+  const newTotal = (state.days[date] || 0) + amount;
+
+  if (!Number.isSafeInteger(newTotal)) {
+    alert('That total is too large.');
+    return;
+  }
+
+  state.days[date] = newTotal;
+  save();
+
+  document.getElementById('amount').value = '';
+  render();
+}
+
+document.getElementById('addButton').addEventListener('click', addEntry);
+
+document.getElementById('amount').addEventListener('keydown', event => {
+  if (event.key === 'Enter') addEntry();
+});
+
+// Settings.
+document.getElementById('targetInput').addEventListener('change', event => {
+  state.target = clampInteger(event.target.value, 0, 1000000000, 0);
+  save();
+  render();
+});
+
+document.getElementById('startDateInput').addEventListener('change', event => {
+  if (!validDate(event.target.value)) return;
+  state.startDate = event.target.value;
+  save();
+  render();
+});
+
+document.getElementById('rollingInput').addEventListener('change', event => {
+  state.rollingDays = clampInteger(event.target.value, 1, 365, 7);
+  save();
+  render();
+});
+
+document.getElementById('bandPositionInput').addEventListener('change', event => {
+  state.bandPosition = clampNumber(event.target.value, 0, 100000, 3.5);
+  save();
+  render();
+});
+
+document.getElementById('bandToleranceInput').addEventListener('change', event => {
+  state.bandTolerance = clampNumber(event.target.value, 0, 100000, 0.5);
+  save();
+  render();
+});
+
+// CSV export.
+document.getElementById('exportButton').addEventListener('click', () => {
+  const dates = Object.keys(state.days).sort();
+  const rows = [['Date', 'Exercises completed', 'Target']];
+
+  dates.forEach(date => rows.push([date, state.days[date], state.target]));
+
+  const csv = rows.map(row =>
+    row.map(value => {
+      const text = String(value);
+      return /[",\n]/.test(text)
+        ? `"${text.replace(/"/g, '""')}"`
+        : text;
+    }).join(',')
+  ).join('\r\n');
+
+  const blob = new Blob(['\uFEFF' + csv], {
+    type: 'text/csv;charset=utf-8'
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = 'math-exercise-tracker.csv';
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// CSV parser.
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (quoted) {
+      if (char === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+    } else if (char === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (char !== '\r') {
+      field += char;
+    }
+  }
+
+  row.push(field);
+
+  if (row.some(value => value !== '')) rows.push(row);
+
+  return rows;
+}
+
+// CSV import.
+document.getElementById('importButton').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+
+document.getElementById('importFile').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    const content = (await file.text()).replace(/^\uFEFF/, '');
+    const rows = parseCSV(content);
+
+    if (rows.length < 2) {
+      throw new Error('The CSV contains no data rows.');
+    }
+
+    const headers = rows[0].map(value => value.trim().toLowerCase());
+    const dateIndex = headers.indexOf('date');
+    const countIndex = headers.indexOf('exercises completed');
+    const targetIndex = headers.indexOf('target');
+
+    if (dateIndex === -1 || countIndex === -1) {
+      throw new Error('Required columns: Date, Exercises completed.');
+    }
+
+    const importedDays = {};
+    let importedEntries = 0;
+    let importedTarget = null;
+
+    for (const row of rows.slice(1)) {
+      const date = (row[dateIndex] || '').trim();
+      const rawCount = (row[countIndex] || '').trim();
+
+      if (!date && !rawCount) continue;
+
+      const count = Number(rawCount);
+
+      if (!validDate(date) || !Number.isSafeInteger(count) || count < 0) {
+        throw new Error(`Invalid date or exercise count: ${row.join(', ')}`);
+      }
+
+      if (count > 0) {
+        const combined = (importedDays[date] || 0) + count;
+
+        if (!Number.isSafeInteger(combined)) {
+          throw new Error(`Exercise total is too large for ${date}.`);
+        }
+
+        importedDays[date] = combined;
+        importedEntries++;
+      }
+
+      if (targetIndex !== -1 && importedTarget === null) {
+        const parsedTarget = Number((row[targetIndex] || '').trim());
+
+        if (Number.isFinite(parsedTarget) && parsedTarget >= 0) {
+          importedTarget = Math.floor(parsedTarget);
+        }
+      }
+    }
+
+    if (!importedEntries) {
+      throw new Error('No exercise entries were found.');
+    }
+
+    if (!confirm('Importing will replace your current daily history. Continue?')) {
+      return;
+    }
+
+    state.days = importedDays;
+
+    if (importedTarget !== null) {
+      state.target = importedTarget;
+    }
+
+    save();
+    render();
+
+    alert(`Imported ${importedEntries} entries across ${Object.keys(importedDays).length} days.`);
+  } catch (error) {
+    alert(`Import failed: ${error.message}`);
+  } finally {
+    event.target.value = '';
+  }
+});
+
+// Initialisation.
+document.getElementById('entryDate').value = localToday();
+render();
+
+let resizeTimer;
+
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(drawChart, 100);
+});
+</script>
+</body>
+</html>
+

@@ -121,7 +121,7 @@ p { color: var(--muted); }
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -150,6 +150,42 @@ p { color: var(--muted); }
   color: var(--muted);
   font-size: 11px;
   margin-top: 4px;
+}
+.stat-note.good { color: var(--green); }
+.stat-note.bad { color: var(--red); }
+.stat-value.good { color: var(--green); }
+.stat-value.bad { color: var(--red); }
+
+.streak-visualizer {
+  row-gap: 15px;
+  column-gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  grid-template-rows: repeat(2, 12px);
+  margin-top: 16px;
+  margin-bottom:16px;
+}
+.streak-day {
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.streak-day.done {
+  background: var(--green);
+  border-color: var(--green);
+}
+.streak-day.today {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+.streak-day-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .progress-track {
@@ -441,7 +477,7 @@ footer {
     grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
   }
 
-  .stats { gap: 8px; }
+  .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .stat { padding: 12px; }
   .stat-value { font-size: 22px; }
   .chart-wrap { height: 350px; }
@@ -506,9 +542,15 @@ footer {
           <div class="stat-value" id="average">0</div>
           <div class="stat-note">Since start date</div>
         </div>
+        <div class="stat" id="rollingStat">
+          <div class="stat-label">Rolling average</div>
+          <div class="stat-value" id="rollingAverage">0</div>
+          <div class="stat-note" id="rollingNeeded">Set a planned finish date</div>
+        </div>
         <div class="stat">
           <div class="stat-label">Predicted finish</div>
           <div class="stat-value" id="prediction">—</div>
+          <div class="stat-note" id="averagePrediction">Based on overall average: —</div>
         </div>
       </div>
 
@@ -588,6 +630,8 @@ footer {
         </div>
 
         <p class="streak-message" id="streakMessage">Log at least one exercise to start a streak.</p>
+        <div class="streak-visualizer" id="streakVisualizer" aria-label="Last 30 days of exercise activity"></div>
+        <div class="streak-day-labels"><span>30 days ago</span><span>Today</span></div>
       </section>
 
     </div>
@@ -611,6 +655,12 @@ footer {
             <label for="startDateInput">Start date</label>
             <input type="date" id="startDateInput">
             <div class="setting-help">Used for the graph and daily average.</div>
+          </div>
+
+          <div>
+            <label for="plannedFinishInput">Planned finish date</label>
+            <input type="date" id="plannedFinishInput">
+            <div class="setting-help">Used to calculate the rolling average needed to reach your target.</div>
           </div>
 
           <div>
@@ -739,10 +789,19 @@ function loadState() {
         }
       }
 
+      const firstLoggedDate = Object.keys(days).sort()[0] || '';
+      // If a previous version accidentally saved today as the start date,
+      // recover the real tracking span from the earliest recorded activity.
+      const savedStartDate = validDate(saved.startDate) ? saved.startDate : '';
+      const startDate = firstLoggedDate && (!savedStartDate || firstLoggedDate < savedStartDate)
+        ? firstLoggedDate
+        : (savedStartDate || localToday());
+
       return {
         target: clampInteger(saved.target, 0, 1000000000, 0),
-        startDate: validDate(saved.startDate) ? saved.startDate : localToday(),
+        startDate,
         rollingDays: clampInteger(saved.rollingDays, 1, 365, 7),
+        plannedFinishDate: validDate(saved.plannedFinishDate) ? saved.plannedFinishDate : '',
         bandPosition: clampNumber(saved.bandPosition, 0, 100000, 3.5),
         bandTolerance: clampNumber(saved.bandTolerance, 0, 100000, 0.5),
         days
@@ -756,6 +815,7 @@ function loadState() {
     target: 0,
     startDate: localToday(),
     rollingDays: 7,
+    plannedFinishDate: '',
     bandPosition: 3.5,
     bandTolerance: 0.5,
     days: {}
@@ -783,21 +843,43 @@ function getStats() {
     1,
     Math.floor((dateToMs(today) - dateToMs(state.startDate)) / DAY_MS) + 1
   );
-
   const completedUntilToday = dates
     .filter(date => date <= today)
     .reduce((sum, date) => sum + state.days[date], 0);
-
   const average = completedUntilToday / elapsedDays;
-  let prediction = '—';
 
-  if (state.target > 0 && remaining === 0) {
-    prediction = 'Done';
-  } else if (remaining > 0 && average > 0) {
-    prediction = formatDate(addDays(today, Math.ceil(remaining / average)));
+  let rollingSum = 0;
+  for (let i = 0; i < state.rollingDays; i++) {
+    rollingSum += state.days[addDays(today, -i)] || 0;
+  }
+  const rollingAverage = rollingSum / state.rollingDays;
+
+  let prediction = '—';
+  if (state.target > 0 && remaining === 0) prediction = 'Done';
+  else if (remaining > 0 && rollingAverage > 0) {
+    prediction = formatDate(addDays(today, Math.ceil(remaining / rollingAverage)));
   }
 
-  return { dates, total, remaining, average, prediction };
+  let averagePrediction = '—';
+  if (state.target > 0 && remaining === 0) averagePrediction = 'Done';
+  else if (remaining > 0 && average > 0) {
+    averagePrediction = formatDate(addDays(today, Math.ceil(remaining / average)));
+  }
+
+  let requiredRollingAverage = null;
+  if (validDate(state.plannedFinishDate) && state.plannedFinishDate > today && remaining > 0) {
+    const daysAvailable = Math.round(
+      (dateToMs(state.plannedFinishDate) - dateToMs(today)) / DAY_MS
+    );
+    requiredRollingAverage = remaining / daysAvailable;
+  } else if (validDate(state.plannedFinishDate) && remaining === 0) {
+    requiredRollingAverage = 0;
+  }
+
+  return {
+    dates, total, remaining, average, rollingAverage, prediction,
+    averagePrediction, requiredRollingAverage
+  };
 }
 
 function getStreaks() {
@@ -851,7 +933,30 @@ function render() {
   document.getElementById('done').textContent = stats.total.toLocaleString();
   document.getElementById('remaining').textContent = stats.remaining.toLocaleString();
   document.getElementById('average').textContent = stats.average.toFixed(1);
+  document.getElementById('rollingAverage').textContent = stats.rollingAverage.toFixed(2);
   document.getElementById('prediction').textContent = stats.prediction;
+  document.getElementById('averagePrediction').textContent =
+    `Based on overall average: ${stats.averagePrediction}`;
+
+  const rollingValue = document.getElementById('rollingAverage');
+  const rollingNote = document.getElementById('rollingNeeded');
+  rollingValue.classList.remove('good', 'bad');
+  rollingNote.classList.remove('good', 'bad');
+  if (stats.requiredRollingAverage === null) {
+    rollingNote.textContent = state.plannedFinishDate
+      ? 'Planned date must be in the future (or target is complete)'
+      : 'Set a planned finish date';
+  } else if (stats.requiredRollingAverage === 0) {
+    rollingNote.textContent = 'Target already completed';
+    rollingValue.classList.add('good');
+    rollingNote.classList.add('good');
+  } else {
+    const required = stats.requiredRollingAverage;
+    const closeEnough = stats.rollingAverage >= required * 0.9;
+    rollingNote.textContent = `Need ${required.toFixed(2)}/day by ${formatDate(state.plannedFinishDate)}`;
+    rollingValue.classList.add(closeEnough ? 'good' : 'bad');
+    rollingNote.classList.add(closeEnough ? 'good' : 'bad');
+  }
 
   const percent = state.target > 0
     ? Math.min(100, stats.total / state.target * 100)
@@ -882,9 +987,27 @@ function render() {
   document.getElementById('rollingInput').value = state.rollingDays;
   document.getElementById('bandPositionInput').value = state.bandPosition;
   document.getElementById('bandToleranceInput').value = state.bandTolerance;
+  document.getElementById('plannedFinishInput').value = state.plannedFinishDate || '';
 
+  renderStreakVisualizer();
   renderHistory(stats.dates);
   drawChart();
+}
+
+function renderStreakVisualizer() {
+  const container = document.getElementById('streakVisualizer');
+  container.innerHTML = '';
+  const today = localToday();
+
+  for (let i = 29; i >= 0; i--) {
+    const date = addDays(today, -i);
+    const day = document.createElement('div');
+    const completed = (state.days[date] || 0) > 0;
+    day.className = `streak-day${completed ? ' done' : ''}${date === today ? ' today' : ''}`;
+    day.title = `${formatDate(date, { year: true })}: ${completed ? state.days[date] + ' exercises' : 'No exercises'}`;
+    day.setAttribute('aria-label', day.title);
+    container.append(day);
+  }
 }
 
 function renderHistory(dates) {
@@ -1240,6 +1363,7 @@ function addEntry() {
   save();
 
   document.getElementById('amount').value = '';
+  document.getElementById('entryDate').value = localToday();
   render();
 }
 
@@ -1263,6 +1387,13 @@ document.getElementById('startDateInput').addEventListener('change', event => {
   render();
 });
 
+document.getElementById('plannedFinishInput').addEventListener('change', event => {
+  const value = event.target.value;
+  state.plannedFinishDate = value && validDate(value) ? value : '';
+  save();
+  render();
+});
+
 document.getElementById('rollingInput').addEventListener('change', event => {
   state.rollingDays = clampInteger(event.target.value, 1, 365, 7);
   save();
@@ -1281,36 +1412,37 @@ document.getElementById('bandToleranceInput').addEventListener('change', event =
   render();
 });
 
-// CSV export.
+// CSV export. Settings are stored as metadata rows before the daily records.
 document.getElementById('exportButton').addEventListener('click', () => {
-  const dates = Object.keys(state.days).sort();
-  const rows = [['Date', 'Exercises completed', 'Target']];
+  const rows = [
+    ['# Settings', 'Value'],
+    ['target', state.target],
+    ['startDate', state.startDate],
+    ['rollingDays', state.rollingDays],
+    ['plannedFinishDate', state.plannedFinishDate || ''],
+    ['bandPosition', state.bandPosition],
+    ['bandTolerance', state.bandTolerance],
+    [],
+    ['Date', 'Exercises completed', 'Target']
+  ];
 
-  dates.forEach(date => rows.push([date, state.days[date], state.target]));
+  Object.keys(state.days).sort().forEach(date => rows.push([date, state.days[date], state.target]));
 
   const csv = rows.map(row =>
     row.map(value => {
-      const text = String(value);
-      return /[",\n]/.test(text)
-        ? `"${text.replace(/"/g, '""')}"`
-        : text;
+      const text = String(value ?? '');
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     }).join(',')
   ).join('\r\n');
 
-  const blob = new Blob(['\uFEFF' + csv], {
-    type: 'text/csv;charset=utf-8'
-  });
-
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-
   link.href = url;
   link.download = 'math-exercise-tracker.csv';
-
   document.body.appendChild(link);
   link.click();
   link.remove();
-
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
@@ -1355,7 +1487,7 @@ function parseCSV(text) {
   return rows;
 }
 
-// CSV import.
+// CSV import. Supports both legacy exports and exports containing settings.
 document.getElementById('importButton').addEventListener('click', () => {
   document.getElementById('importFile').click();
 });
@@ -1367,74 +1499,87 @@ document.getElementById('importFile').addEventListener('change', async event => 
   try {
     const content = (await file.text()).replace(/^\uFEFF/, '');
     const rows = parseCSV(content);
+    if (!rows.length) throw new Error('The CSV is empty.');
 
-    if (rows.length < 2) {
-      throw new Error('The CSV contains no data rows.');
-    }
+    const settings = {};
+    let headerIndex = -1;
+    let dateIndex = -1;
+    let countIndex = -1;
+    let targetIndex = -1;
 
-    const headers = rows[0].map(value => value.trim().toLowerCase());
-    const dateIndex = headers.indexOf('date');
-    const countIndex = headers.indexOf('exercises completed');
-    const targetIndex = headers.indexOf('target');
+    rows.forEach((row, index) => {
+      const key = (row[0] || '').trim();
+      if (['target', 'startDate', 'rollingDays', 'plannedFinishDate',
+           'bandPosition', 'bandTolerance'].includes(key)) settings[key] = (row[1] || '').trim();
 
-    if (dateIndex === -1 || countIndex === -1) {
-      throw new Error('Required columns: Date, Exercises completed.');
-    }
+      const headers = row.map(value => value.trim().toLowerCase());
+      if (headers.includes('date') && headers.includes('exercises completed')) {
+        headerIndex = index;
+        dateIndex = headers.indexOf('date');
+        countIndex = headers.indexOf('exercises completed');
+        targetIndex = headers.indexOf('target');
+      }
+    });
+
+    if (headerIndex === -1) throw new Error('Required columns: Date, Exercises completed.');
 
     const importedDays = {};
     let importedEntries = 0;
     let importedTarget = null;
 
-    for (const row of rows.slice(1)) {
+    for (const row of rows.slice(headerIndex + 1)) {
       const date = (row[dateIndex] || '').trim();
       const rawCount = (row[countIndex] || '').trim();
-
       if (!date && !rawCount) continue;
 
       const count = Number(rawCount);
-
       if (!validDate(date) || !Number.isSafeInteger(count) || count < 0) {
         throw new Error(`Invalid date or exercise count: ${row.join(', ')}`);
       }
-
       if (count > 0) {
         const combined = (importedDays[date] || 0) + count;
-
-        if (!Number.isSafeInteger(combined)) {
-          throw new Error(`Exercise total is too large for ${date}.`);
-        }
-
+        if (!Number.isSafeInteger(combined)) throw new Error(`Exercise total is too large for ${date}.`);
         importedDays[date] = combined;
         importedEntries++;
       }
-
       if (targetIndex !== -1 && importedTarget === null) {
         const parsedTarget = Number((row[targetIndex] || '').trim());
-
-        if (Number.isFinite(parsedTarget) && parsedTarget >= 0) {
-          importedTarget = Math.floor(parsedTarget);
-        }
+        if (Number.isFinite(parsedTarget) && parsedTarget >= 0) importedTarget = Math.floor(parsedTarget);
       }
     }
 
-    if (!importedEntries) {
-      throw new Error('No exercise entries were found.');
-    }
-
-    if (!confirm('Importing will replace your current daily history. Continue?')) {
-      return;
-    }
+    if (!importedEntries) throw new Error('No exercise entries were found.');
+    if (!confirm('Importing will replace your current history and any settings included in the CSV. Continue?')) return;
 
     state.days = importedDays;
 
-    if (importedTarget !== null) {
-      state.target = importedTarget;
+    const numericSetting = (key, min, max, fallback, integer = false) => {
+      if (settings[key] === undefined || settings[key] === '') return fallback;
+      const value = Number(settings[key]);
+      if (!Number.isFinite(value)) return fallback;
+      const bounded = Math.min(max, Math.max(min, value));
+      return integer ? Math.floor(bounded) : bounded;
+    };
+
+    if (settings.target !== undefined) state.target = numericSetting('target', 0, 1000000000, state.target, true);
+    else if (importedTarget !== null) state.target = importedTarget;
+
+    if (settings.startDate !== undefined && validDate(settings.startDate)) {
+      state.startDate = settings.startDate;
+    } else {
+      state.startDate = Object.keys(importedDays).sort()[0] || state.startDate;
     }
+    if (settings.rollingDays !== undefined) state.rollingDays = numericSetting('rollingDays', 1, 365, state.rollingDays, true);
+    if (settings.plannedFinishDate !== undefined) {
+      state.plannedFinishDate = settings.plannedFinishDate && validDate(settings.plannedFinishDate)
+        ? settings.plannedFinishDate : '';
+    }
+    if (settings.bandPosition !== undefined) state.bandPosition = numericSetting('bandPosition', 0, 100000, state.bandPosition);
+    if (settings.bandTolerance !== undefined) state.bandTolerance = numericSetting('bandTolerance', 0, 100000, state.bandTolerance);
 
     save();
     render();
-
-    alert(`Imported ${importedEntries} entries across ${Object.keys(importedDays).length} days.`);
+    alert(`Imported ${importedEntries} entries across ${Object.keys(importedDays).length} days, including settings where available.`);
   } catch (error) {
     alert(`Import failed: ${error.message}`);
   } finally {
