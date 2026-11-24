@@ -90,6 +90,7 @@ p { color: var(--muted); }
   grid-template-areas:
     "overview overview"
     "chart sidebar"
+    "time sidebar"
     "bottom bottom";
   gap: 16px;
   align-items: start;
@@ -100,6 +101,34 @@ p { color: var(--muted); }
 .chart-panel {
   grid-area: chart;
   min-height: 100%;
+}
+
+.time-panel { grid-area: time; }
+.time-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.time-stat {
+  min-width: 0;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.time-stat .stat-value { font-size: 23px; }
+.time-estimator {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-top: 14px;
+}
+.time-estimator-result {
+  color: var(--green);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 10px 0;
 }
 
 .sidebar {
@@ -117,7 +146,7 @@ p { color: var(--muted); }
   gap: 16px;
 }
 
-.bottom-grid > .panel { min-width: 0; }
+.bottom-grid > .panel { min-width: 0; grid-column: 1 / -1; }
 
 .stats {
   display: grid;
@@ -292,6 +321,9 @@ button.danger {
   gap: 16px;
 }
 
+.settings-history-content { display: grid; gap: 16px; margin-top: 14px; }
+.settings-history-content > .panel { min-width: 0; }
+
 /* Chart */
 
 .chart-wrap {
@@ -391,6 +423,15 @@ canvas {
 }
 
 .history-details summary::-webkit-details-marker { display: none; }
+.settings-details {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 13px 14px;
+}
+.settings-details > summary { cursor: pointer; font-weight: 700; list-style: none; }
+.settings-details > summary::-webkit-details-marker { display: none; }
+.settings-details > summary::after { content: "+"; float: right; color: var(--yellow); font-size: 18px; font-weight: 400; }
+.settings-details[open] > summary::after { content: "−"; }
 
 .history-details summary::after {
   content: "+";
@@ -491,6 +532,7 @@ footer {
     grid-template-areas:
       "overview"
       "chart"
+      "time"
       "sidebar"
       "bottom";
   }
@@ -588,6 +630,38 @@ footer {
       </div>
     </section>
 
+    <!-- TIME TRACKING -->
+    <section class="panel time-panel">
+      <div class="section-heading">
+        <h2>Time tracking</h2>
+        <span class="section-note">Based on sessions with recorded time</span>
+      </div>
+      <div class="time-stats">
+        <div class="time-stat">
+          <div class="stat-label">All-time average</div>
+          <div class="stat-value" id="timePerExercise">—</div>
+          <div class="stat-note">Time per exercise</div>
+        </div>
+        <div class="time-stat">
+          <div class="stat-label">Time remaining</div>
+          <div class="stat-value" id="timeRemaining">—</div>
+          <div class="stat-note">Estimated hours to target</div>
+        </div>
+        <div class="time-stat">
+          <div class="stat-label">Estimate for exercises</div>
+          <div class="stat-value" id="timeEstimate">—</div>
+          <div class="stat-note" id="timeEstimateBasis">Enter an exercise amount below</div>
+        </div>
+      </div>
+      <div class="time-estimator">
+        <div>
+          <label for="estimateExercises">How many exercises?</label>
+          <input type="number" id="estimateExercises" min="0.01" step="0.1" value="10" placeholder="e.g. 2.5">
+        </div>
+        <div class="time-estimator-result" id="customTimeEstimate">—</div>
+      </div>
+    </section>
+
     <!-- RIGHT SIDEBAR -->
     <div class="sidebar">
 
@@ -603,12 +677,16 @@ footer {
           </div>
           <div>
             <label for="amount">Exercises completed</label>
-            <input type="number" id="amount" min="1" step="1" placeholder="e.g. 15">
+            <input type="number" id="amount" min="0.01" step="0.1" placeholder="e.g. 3 or 1.5">
           </div>
-          <button id="addButton">Add entry</button>
+          <div>
+            <label for="sessionHours">Time spent (hours)</label>
+            <input type="number" id="sessionHours" min="0.01" step="0.1" placeholder="e.g. 2">
+          </div>
+          <button id="addButton">Add session</button>
         </div>
 
-        <p class="small-note">Multiple entries on the same date are added together.</p>
+        <p class="small-note">Each entry is a separate session. Daily totals combine all sessions on the same date.</p>
       </section>
 
       <section class="panel">
@@ -638,79 +716,67 @@ footer {
 
     <!-- BOTTOM GRID -->
     <div class="bottom-grid">
-
       <section class="panel">
-        <div class="section-heading">
-          <h2>Settings</h2>
-        </div>
-
-        <div class="settings-grid">
-          <div>
-            <label for="targetInput">Exercise target</label>
-            <input type="number" id="targetInput" min="0" step="1">
-            <div class="setting-help">Your total exercise goal.</div>
-          </div>
-
-          <div>
-            <label for="startDateInput">Start date</label>
-            <input type="date" id="startDateInput">
-            <div class="setting-help">Used for the graph and daily average.</div>
-          </div>
-
-          <div>
-            <label for="plannedFinishInput">Planned finish date</label>
-            <input type="date" id="plannedFinishInput">
-            <div class="setting-help">Used to calculate the rolling average needed to reach your target.</div>
-          </div>
-
-          <div>
-            <label for="rollingInput">Rolling average (days)</label>
-            <input type="number" id="rollingInput" min="1" max="365" step="1">
-            <div class="setting-help">Calendar days, including days with zero exercises.</div>
-          </div>
-
-          <div>
-            <label for="bandPositionInput">Band position (centre)</label>
-            <input type="number" id="bandPositionInput" min="0" max="100000" step="0.5">
-            <div class="setting-help">For example, 3.5 centres the band between 3 and 4.</div>
-          </div>
-
-          <div>
-            <label for="bandToleranceInput">Band tolerance (± exercises)</label>
-            <input type="number" id="bandToleranceInput" min="0" max="100000" step="0.5">
-            <div class="setting-help">For example, 0.5 creates a band from 3 to 4.</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="section-heading">
-          <h2>Daily history</h2>
-          <span class="section-note" id="entryCount">0 days</span>
-        </div>
-
-        <details class="history-details">
-          <summary>Show daily entries</summary>
-          <div class="history-list" id="history">
-            <div class="empty">No entries yet.</div>
+        <details class="settings-details">
+          <summary>Settings and history</summary>
+          <div class="settings-history-content">
+            <section>
+              <div class="section-heading"><h2>Settings</h2></div>
+              <div class="settings-grid">
+                <div>
+                  <label for="targetInput">Exercise target</label>
+                  <input type="number" id="targetInput" min="0" step="0.1">
+                  <div class="setting-help">Your total exercise goal.</div>
+                </div>
+                <div>
+                  <label for="startDateInput">Start date</label>
+                  <input type="date" id="startDateInput">
+                  <div class="setting-help">Used for the graph and daily average.</div>
+                </div>
+                <div>
+                  <label for="plannedFinishInput">Planned finish date</label>
+                  <input type="date" id="plannedFinishInput">
+                  <div class="setting-help">Used to calculate the rolling average needed to reach your target.</div>
+                </div>
+                <div>
+                  <label for="rollingInput">Rolling average (days)</label>
+                  <input type="number" id="rollingInput" min="1" max="365" step="1">
+                  <div class="setting-help">Calendar days, including days with zero exercises.</div>
+                </div>
+                <div>
+                  <label for="bandPositionInput">Band position (centre)</label>
+                  <input type="number" id="bandPositionInput" min="0" max="100000" step="0.5">
+                  <div class="setting-help">For example, 3.5 centres the band between 3 and 4.</div>
+                </div>
+                <div>
+                  <label for="bandToleranceInput">Band tolerance (± exercises)</label>
+                  <input type="number" id="bandToleranceInput" min="0" max="100000" step="0.5">
+                  <div class="setting-help">For example, 0.5 creates a band from 3 to 4.</div>
+                </div>
+              </div>
+            </section>
+            <section>
+              <div class="section-heading">
+                <h2>History</h2>
+                <span class="section-note" id="entryCount">0 days</span>
+              </div>
+              <details class="history-details">
+                <summary>Show daily entries</summary>
+                <div class="history-list" id="history"><div class="empty">No entries yet.</div></div>
+              </details>
+            </section>
+            <section>
+              <div class="section-heading"><h2>Data management</h2></div>
+              <div class="actions">
+                <button class="secondary" id="exportButton">Export CSV</button>
+                <button class="secondary" id="importButton">Import CSV</button>
+                <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+              </div>
+              <p class="small-note">Your data is saved automatically in this browser. Export a CSV backup periodically.</p>
+            </section>
           </div>
         </details>
       </section>
-
-      <section class="panel">
-        <div class="section-heading">
-          <h2>Data management</h2>
-        </div>
-
-        <div class="actions">
-          <button class="secondary" id="exportButton">Export CSV</button>
-          <button class="secondary" id="importButton">Import CSV</button>
-          <input type="file" id="importFile" accept=".csv,text/csv" hidden>
-        </div>
-
-        <p class="small-note">Your data is saved automatically in this browser. Export a CSV backup periodically.</p>
-      </section>
-
     </div>
   </div>
 
@@ -779,13 +845,21 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved && typeof saved === 'object') {
       const days = {};
+      const sessions = {};
 
       if (saved.days && typeof saved.days === 'object') {
         for (const [date, count] of Object.entries(saved.days)) {
           const n = Number(count);
-          if (validDate(date) && Number.isSafeInteger(n) && n > 0) {
-            days[date] = n;
-          }
+          if (validDate(date) && Number.isFinite(n) && n > 0) days[date] = n;
+        }
+      }
+      if (saved.sessions && typeof saved.sessions === 'object') {
+        for (const [date, entries] of Object.entries(saved.sessions)) {
+          if (!validDate(date) || !Array.isArray(entries)) continue;
+          sessions[date] = entries.map(entry => ({
+            exercises: Number(entry.exercises),
+            hours: Number(entry.hours)
+          })).filter(entry => Number.isFinite(entry.exercises) && entry.exercises > 0 && Number.isFinite(entry.hours) && entry.hours > 0);
         }
       }
 
@@ -798,13 +872,14 @@ function loadState() {
         : (savedStartDate || localToday());
 
       return {
-        target: clampInteger(saved.target, 0, 1000000000, 0),
+        target: clampNumber(saved.target, 0, 1000000000, 0),
         startDate,
         rollingDays: clampInteger(saved.rollingDays, 1, 365, 7),
         plannedFinishDate: validDate(saved.plannedFinishDate) ? saved.plannedFinishDate : '',
         bandPosition: clampNumber(saved.bandPosition, 0, 100000, 3.5),
         bandTolerance: clampNumber(saved.bandTolerance, 0, 100000, 0.5),
-        days
+        days,
+        sessions
       };
     }
   } catch (error) {
@@ -818,7 +893,8 @@ function loadState() {
     plannedFinishDate: '',
     bandPosition: 3.5,
     bandTolerance: 0.5,
-    days: {}
+    days: {},
+    sessions: {}
   };
 }
 
@@ -876,9 +952,25 @@ function getStats() {
     requiredRollingAverage = 0;
   }
 
+  const timedSessions = Object.values(state.sessions || {}).flat();
+  const timedExercises = timedSessions.reduce((sum, session) => sum + session.exercises, 0);
+  const totalHours = timedSessions.reduce((sum, session) => sum + session.hours, 0);
+  const allTimeHoursPerExercise = timedExercises > 0 ? totalHours / timedExercises : null;
+  const rollingStart = addDays(today, -(state.rollingDays - 1));
+  const rollingSessions = Object.entries(state.sessions || {})
+    .filter(([date]) => date >= rollingStart && date <= today)
+    .flatMap(([, entries]) => entries);
+  const rollingTimedExercises = rollingSessions.reduce((sum, session) => sum + session.exercises, 0);
+  const rollingHours = rollingSessions.reduce((sum, session) => sum + session.hours, 0);
+  const rollingHoursPerExercise = rollingTimedExercises > 0
+    ? rollingHours / rollingTimedExercises : null;
+  const estimateRate = rollingHoursPerExercise ?? allTimeHoursPerExercise;
+
   return {
     dates, total, remaining, average, rollingAverage, prediction,
-    averagePrediction, requiredRollingAverage
+    averagePrediction, requiredRollingAverage,
+    allTimeHoursPerExercise, totalHours, estimateRate,
+    estimateBasis: rollingHoursPerExercise !== null ? `Based on last ${state.rollingDays} days` : 'Based on all-time average'
   };
 }
 
@@ -926,6 +1018,16 @@ function getStreaks() {
   return { current, best };
 }
 
+function formatDuration(hours) {
+  if (!Number.isFinite(hours) || hours < 0) return '—';
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+
 function render() {
   const stats = getStats();
   const streaks = getStreaks();
@@ -937,6 +1039,17 @@ function render() {
   document.getElementById('prediction').textContent = stats.prediction;
   document.getElementById('averagePrediction').textContent =
     `Based on overall average: ${stats.averagePrediction}`;
+  document.getElementById('timePerExercise').textContent = stats.allTimeHoursPerExercise === null
+    ? '—' : formatDuration(stats.allTimeHoursPerExercise);
+  document.getElementById('timeRemaining').textContent = stats.estimateRate === null
+    ? '—' : formatDuration(stats.remaining * stats.estimateRate);
+  const estimateInput = Number(document.getElementById('estimateExercises').value);
+  const customEstimate = Number.isFinite(estimateInput) && estimateInput > 0 && stats.estimateRate !== null
+    ? estimateInput * stats.estimateRate : null;
+  document.getElementById('timeEstimate').textContent = customEstimate === null ? '—' : formatDuration(customEstimate);
+  document.getElementById('timeEstimateBasis').textContent = stats.estimateBasis;
+  document.getElementById('customTimeEstimate').textContent = customEstimate === null
+    ? 'No timed sessions yet' : `${formatDuration(customEstimate)} for ${formatNumber(estimateInput)} exercises`;
 
   const rollingValue = document.getElementById('rollingAverage');
   const rollingNote = document.getElementById('rollingNeeded');
@@ -966,7 +1079,7 @@ function render() {
   document.getElementById('progressBar').style.width = `${percent}%`;
 
   document.getElementById('progressDone').textContent =
-    `${stats.total.toLocaleString()} completed`;
+    `${formatNumber(stats.total)} completed`;
 
   document.getElementById('progressTarget').textContent =
     `Target: ${state.target.toLocaleString()}`;
@@ -1035,9 +1148,14 @@ function renderHistory(dates) {
 
     const count = document.createElement('span');
     count.className = 'history-count';
-    count.textContent = `+${state.days[date].toLocaleString()}`;
+    count.textContent = `+${formatNumber(state.days[date])}`;
+    const daySessions = (state.sessions?.[date] || []);
+    const timedHours = daySessions.reduce((sum, session) => sum + session.hours, 0);
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'section-note';
+    timeLabel.textContent = daySessions.length ? `${formatDuration(timedHours)} (${daySessions.length} sessions)` : 'No time recorded';
 
-    left.append(dateLabel, count);
+    left.append(dateLabel, count, timeLabel);
 
     const remove = document.createElement('button');
     remove.className = 'danger';
@@ -1047,6 +1165,7 @@ function renderHistory(dates) {
     remove.addEventListener('click', () => {
       if (confirm(`Delete the entry for ${formatDate(date)}?`)) {
         delete state.days[date];
+        if (state.sessions) delete state.sessions[date];
         save();
         render();
       }
@@ -1305,7 +1424,7 @@ canvas.addEventListener('pointermove', event => {
 
   tooltip.innerHTML = `
     <strong>${formatDate(point.date, { year: true })}</strong><br>
-    Daily exercises: <strong>${point.count.toLocaleString()}</strong><br>
+    Daily exercises: <strong>${formatNumber(point.count)}</strong><br>
     Rolling average: ${point.average.toFixed(2)}<br>
     Difference: ${(point.count - point.average) > 0 ? '+' : ''}${(point.count - point.average).toFixed(2)}
   `;
@@ -1341,28 +1460,36 @@ canvas.addEventListener('pointerleave', () => {
 function addEntry() {
   const date = document.getElementById('entryDate').value;
   const amount = Number(document.getElementById('amount').value);
+  const hours = Number(document.getElementById('sessionHours').value);
 
   if (!validDate(date)) {
     alert('Please select a valid date.');
     return;
   }
 
-  if (!Number.isSafeInteger(amount) || amount < 1) {
-    alert('Enter a positive whole number of exercises.');
+  if (!Number.isFinite(amount) || amount <= 0) {
+    alert('Enter a positive number of exercises.');
+    return;
+  }
+  if (!Number.isFinite(hours) || hours <= 0) {
+    alert('Enter the session duration in hours.');
     return;
   }
 
   const newTotal = (state.days[date] || 0) + amount;
-
-  if (!Number.isSafeInteger(newTotal)) {
+  if (!Number.isFinite(newTotal) || newTotal > Number.MAX_SAFE_INTEGER) {
     alert('That total is too large.');
     return;
   }
 
   state.days[date] = newTotal;
+  state.sessions ||= {};
+  state.sessions[date] ||= [];
+  state.sessions[date].push({ exercises: amount, hours });
   save();
 
   document.getElementById('amount').value = '';
+  document.getElementById('sessionHours').value = '';
   document.getElementById('entryDate').value = localToday();
   render();
 }
@@ -1372,10 +1499,14 @@ document.getElementById('addButton').addEventListener('click', addEntry);
 document.getElementById('amount').addEventListener('keydown', event => {
   if (event.key === 'Enter') addEntry();
 });
+document.getElementById('sessionHours').addEventListener('keydown', event => {
+  if (event.key === 'Enter') addEntry();
+});
+document.getElementById('estimateExercises').addEventListener('input', render);
 
 // Settings.
 document.getElementById('targetInput').addEventListener('change', event => {
-  state.target = clampInteger(event.target.value, 0, 1000000000, 0);
+  state.target = clampNumber(event.target.value, 0, 1000000000, 0);
   save();
   render();
 });
@@ -1423,10 +1554,14 @@ document.getElementById('exportButton').addEventListener('click', () => {
     ['bandPosition', state.bandPosition],
     ['bandTolerance', state.bandTolerance],
     [],
-    ['Date', 'Exercises completed', 'Target']
+    ['Date', 'Exercises completed', 'Target', 'Session hours']
   ];
 
-  Object.keys(state.days).sort().forEach(date => rows.push([date, state.days[date], state.target]));
+  Object.keys(state.days).sort().forEach(date => {
+    const sessions = state.sessions?.[date] || [];
+    if (sessions.length) sessions.forEach(session => rows.push([date, session.exercises, state.target, session.hours]));
+    else rows.push([date, state.days[date], state.target, '']);
+  });
 
   const csv = rows.map(row =>
     row.map(value => {
@@ -1506,6 +1641,7 @@ document.getElementById('importFile').addEventListener('change', async event => 
     let dateIndex = -1;
     let countIndex = -1;
     let targetIndex = -1;
+    let hoursIndex = -1;
 
     rows.forEach((row, index) => {
       const key = (row[0] || '').trim();
@@ -1518,12 +1654,14 @@ document.getElementById('importFile').addEventListener('change', async event => 
         dateIndex = headers.indexOf('date');
         countIndex = headers.indexOf('exercises completed');
         targetIndex = headers.indexOf('target');
+        hoursIndex = headers.indexOf('session hours');
       }
     });
 
     if (headerIndex === -1) throw new Error('Required columns: Date, Exercises completed.');
 
     const importedDays = {};
+    const importedSessions = {};
     let importedEntries = 0;
     let importedTarget = null;
 
@@ -1533,18 +1671,23 @@ document.getElementById('importFile').addEventListener('change', async event => 
       if (!date && !rawCount) continue;
 
       const count = Number(rawCount);
-      if (!validDate(date) || !Number.isSafeInteger(count) || count < 0) {
+      if (!validDate(date) || !Number.isFinite(count) || count < 0) {
         throw new Error(`Invalid date or exercise count: ${row.join(', ')}`);
       }
       if (count > 0) {
         const combined = (importedDays[date] || 0) + count;
-        if (!Number.isSafeInteger(combined)) throw new Error(`Exercise total is too large for ${date}.`);
+        if (!Number.isFinite(combined) || combined > Number.MAX_SAFE_INTEGER) throw new Error(`Exercise total is too large for ${date}.`);
         importedDays[date] = combined;
         importedEntries++;
+        const hours = hoursIndex !== -1 ? Number((row[hoursIndex] || '').trim()) : NaN;
+        if (Number.isFinite(hours) && hours > 0) {
+          importedSessions[date] ||= [];
+          importedSessions[date].push({ exercises: count, hours });
+        }
       }
       if (targetIndex !== -1 && importedTarget === null) {
         const parsedTarget = Number((row[targetIndex] || '').trim());
-        if (Number.isFinite(parsedTarget) && parsedTarget >= 0) importedTarget = Math.floor(parsedTarget);
+        if (Number.isFinite(parsedTarget) && parsedTarget >= 0) importedTarget = parsedTarget;
       }
     }
 
@@ -1552,6 +1695,7 @@ document.getElementById('importFile').addEventListener('change', async event => 
     if (!confirm('Importing will replace your current history and any settings included in the CSV. Continue?')) return;
 
     state.days = importedDays;
+    state.sessions = importedSessions;
 
     const numericSetting = (key, min, max, fallback, integer = false) => {
       if (settings[key] === undefined || settings[key] === '') return fallback;
@@ -1561,7 +1705,7 @@ document.getElementById('importFile').addEventListener('change', async event => 
       return integer ? Math.floor(bounded) : bounded;
     };
 
-    if (settings.target !== undefined) state.target = numericSetting('target', 0, 1000000000, state.target, true);
+    if (settings.target !== undefined) state.target = numericSetting('target', 0, 1000000000, state.target);
     else if (importedTarget !== null) state.target = importedTarget;
 
     if (settings.startDate !== undefined && validDate(settings.startDate)) {
