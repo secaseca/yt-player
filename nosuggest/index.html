@@ -2754,20 +2754,20 @@ function publishedTs(v){
   return relativeToTs(p);
 }
 let todayPollTimer = null;
-/* Videos the user has hidden from Today. Resets each day. */
+/* Videos the user has hidden from Today. Hidden for 48 hours. */
 function getTodayHidden(){
-  const today = new Date().toISOString().slice(0, 10);
+  const now = Date.now();
   try{
-    const saved = JSON.parse(localStorage.getItem('ns_today_hidden') || 'null');
-    if(saved && saved.date === today && Array.isArray(saved.ids)) return saved.ids;
+    const saved = JSON.parse(localStorage.getItem('ns_today_hidden') || '{}');
+    return Object.keys(saved).filter(id => now - saved[id] < 48 * 3600 * 1000);
   }catch(e){}
   return [];
 }
+
 function hideFromToday(videoId){
-  const today = new Date().toISOString().slice(0, 10);
-  const ids = getTodayHidden();
-  if(!ids.includes(videoId)) ids.push(videoId);
-  try{ localStorage.setItem('ns_today_hidden', JSON.stringify({date: today, ids})); }catch(e){}
+  const saved = JSON.parse(localStorage.getItem('ns_today_hidden') || '{}');
+  saved[videoId] = Date.now();
+  try{ localStorage.setItem('ns_today_hidden', JSON.stringify(saved)); }catch(e){}
   const card = document.querySelector(`#today-body .video-thumb[onclick*="'${videoId}'"]`);
   if(card && card.parentElement && card.parentElement.children.length === 1){
     initToday();
@@ -2775,8 +2775,9 @@ function hideFromToday(videoId){
     card.remove();
   }
   toastWithAction('Hidden from Today', 3000, 'Undo', () => {
-    const cur = getTodayHidden().filter(id => id !== videoId);
-    try{ localStorage.setItem('ns_today_hidden', JSON.stringify({date: today, ids: cur})); }catch(e){}
+    const saved = JSON.parse(localStorage.getItem('ns_today_hidden') || '{}');
+    delete saved[videoId];
+    try{ localStorage.setItem('ns_today_hidden', JSON.stringify(saved)); }catch(e){}
     initToday();
   });
 }
